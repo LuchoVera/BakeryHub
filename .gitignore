@@ -1,0 +1,90 @@
+## Build Results
+bin/
+obj/
+**/bin/
+**/obj/
+
+## User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vscode/
+.vs/
+.vscode/*
+*.code-workspace
+
+## Dotnet CLI
+.project.lock.json
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## ASP.NET Stuff
+**/wwwroot/
+**/node_modules/
+**/dist/
+**/bundle/
+**/clientapp/dist/
+**/ClientApp/build/
+**/ClientApp/node_modules/
+
+## Entity Framework
+**/Migrations/
+
+## Logs
+*.log
+logs/
+**/logs/
+
+## Database
+*.mdf
+*.ldf
+*.sqlite
+*.db
+
+## NPM / Yarn
+package-lock.json
+yarn.lock
+
+## Rider
+.idea/
+
+## JetBrains
+*.DotSettings.user
+
+## OS-specific files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+## Test results
+TestResults/
+*.coverage
+*.coveragexml
+*.testsettings
+*.trx
+
+## Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+
+## Others
+*.bak
+*.tmp
+*.cache
+*.swp
+
+# Docker
+**/docker-compose.override.yml
+**/.docker/
+
+# Secrets (si estás usando user-secrets)
+secrets.json
+
+# Environment
+.env
+*.env.local

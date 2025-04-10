@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      POSTGRES_USER: yourusername
+      POSTGRES_PASSWORD: yourpassword
+      POSTGRES_DB: yourdatabase
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yourusername -d yourdatabase"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  BakeryHub:
+    image: bakeryhub-api:latest 
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: BakeryHub
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=yourdatabase;Username=yourusername;Password=yourpassword
+      - ASPNETCORE_URLS=http://+:80 
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5000:80"
+
+volumes:
+  postgres_data:

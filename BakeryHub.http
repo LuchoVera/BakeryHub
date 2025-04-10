@@ -1,0 +1,6 @@
+@BakeryHub_HostAddress = http://localhost:5176
+
+GET {{BakeryHub_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
