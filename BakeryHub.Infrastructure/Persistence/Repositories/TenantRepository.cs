@@ -20,10 +20,10 @@ public class TenantRepository : ITenantRepository
                         .FirstOrDefaultAsync(t => t.Subdomain == subdomainLower);
     }
 
-        public async Task<bool> SubdomainExistsAsync(string subdomain)
+    public async Task<bool> SubdomainExistsAsync(string subdomain)
     {
-            var subdomainLower = subdomain?.ToLowerInvariant();
-            return await _context.Tenants.AnyAsync(t => t.Subdomain == subdomainLower);
+        var subdomainLower = subdomain?.ToLowerInvariant();
+        return await _context.Tenants.AnyAsync(t => t.Subdomain == subdomainLower);
     }
 
     public async Task AddAsync(Tenant tenant)
@@ -32,7 +32,7 @@ public class TenantRepository : ITenantRepository
         await _context.Tenants.AddAsync(tenant);
     }
 
-        public async Task<IEnumerable<Tenant>> GetAllAsync()
+    public async Task<IEnumerable<Tenant>> GetAllAsync()
     {
         return await _context.Tenants.ToListAsync();
     }
