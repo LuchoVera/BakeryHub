@@ -9,12 +9,12 @@ namespace BakeryHub.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin")]
-public class CategoriesController : AdminControllerBase 
+public class CategoriesController : AdminControllerBase
 {
     private readonly ICategoryService _categoryService;
 
     public CategoriesController(ICategoryService categoryService, UserManager<ApplicationUser> userManager)
-        : base(userManager) 
+        : base(userManager)
     {
         _categoryService = categoryService;
     }
@@ -68,17 +68,17 @@ public class CategoriesController : AdminControllerBase
     public async Task<IActionResult> UpdateCategory(Guid id, [FromBody] UpdateCategoryDto categoryDto)
     {
         var adminTenantId = await GetCurrentAdminTenantIdAsync();
-            if (adminTenantId == null) return Forbid("Admin not associated with a tenant.");
+        if (adminTenantId == null) return Forbid("Admin not associated with a tenant.");
 
-            var success = await _categoryService.UpdateCategoryForAdminAsync(id, categoryDto, adminTenantId.Value);
-            if (!success) return NotFound($"Category with ID {id} not found for your tenant or update failed.");
-            return NoContent();
+        var success = await _categoryService.UpdateCategoryForAdminAsync(id, categoryDto, adminTenantId.Value);
+        if (!success) return NotFound($"Category with ID {id} not found for your tenant or update failed.");
+        return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)] 
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteCategory(Guid id)
     {
         var adminTenantId = await GetCurrentAdminTenantIdAsync();
