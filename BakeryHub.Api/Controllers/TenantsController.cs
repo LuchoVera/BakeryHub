@@ -10,7 +10,7 @@ namespace BakeryHub.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin")]
-public class TenantsController : AdminControllerBase 
+public class TenantsController : AdminControllerBase
 {
     private readonly ITenantManagementService _tenantService;
 

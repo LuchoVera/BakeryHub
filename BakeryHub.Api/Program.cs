@@ -19,14 +19,14 @@ builder.Services.AddCors(options =>
                       policy =>
                       {
                           policy.SetIsOriginAllowed(origin =>
-                                 origin != null && (
-                                    origin.EndsWith(".localhost:5173") ||
-                                    origin.Equals("http://localhost:5173")
-                                 )
+                                  origin != null && (
+                                      origin.EndsWith(".localhost:5173") ||
+                                      origin.Equals("http://localhost:5173")
+                                  )
                               )
-                             .AllowAnyHeader()
-                             .AllowAnyMethod()
-                             .AllowCredentials();
+                              .AllowAnyHeader()
+                   .AllowAnyMethod()
+                   .AllowCredentials();
                       });
 });
 
@@ -63,7 +63,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-    var connectionString = configuration.GetConnectionString("DefaultConnection"); 
+    var connectionString = configuration.GetConnectionString("DefaultConnection");
     options.UseNpgsql(connectionString);
 });
 
@@ -102,24 +102,24 @@ builder.Services.ConfigureApplicationCookie(options =>
         }
     };
 
-    options.Cookie.HttpOnly = true; 
+    options.Cookie.HttpOnly = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.None;
     options.Cookie.SameSite = SameSiteMode.Lax;
-    options.SlidingExpiration = true; 
+    options.SlidingExpiration = true;
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
-    
+
 });
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
-builder.Services.AddScoped<ICategoryRepository, CategoryRepository>(); 
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 
 builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IProductService, ProductService>();
-builder.Services.AddScoped<ICategoryService, CategoryService>(); 
-builder.Services.AddScoped<ITenantManagementService, TenantManagementService>(); 
+builder.Services.AddScoped<ICategoryService, CategoryService>();
+builder.Services.AddScoped<ITenantManagementService, TenantManagementService>();
 
 var app = builder.Build();
 
@@ -142,6 +142,5 @@ app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
 
 app.MapControllers();
-app.MapGet("/api/ping", () => "Pong desde API!");
 
 app.Run();
