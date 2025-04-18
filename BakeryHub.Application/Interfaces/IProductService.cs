@@ -10,6 +10,5 @@ public interface IProductService
     Task<ProductDto?> CreateProductForAdminAsync(CreateProductDto productDto, Guid adminTenantId);
     Task<bool> UpdateProductForAdminAsync(Guid productId, UpdateProductDto productDto, Guid adminTenantId);
     Task<bool> SetProductAvailabilityForAdminAsync(Guid productId, bool isAvailable, Guid adminTenantId);
-
-       
+    Task<IEnumerable<ProductDto>> GetPublicProductsByTenantIdAsync(Guid tenantId);
 }

@@ -3,20 +3,17 @@ using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
 using BakeryHub.Domain.Interfaces;
 using BakeryHub.Infrastructure.Persistence;
-using Microsoft.Extensions.Logging;
 
 namespace BakeryHub.Application.Services;
 public class CategoryService : ICategoryService
 {
     private readonly ICategoryRepository _categoryRepository;
     private readonly ApplicationDbContext _context;
-    private readonly ILogger<CategoryService> _logger;
 
-    public CategoryService(ICategoryRepository categoryRepository, ApplicationDbContext context, ILogger<CategoryService> logger)
+    public CategoryService(ICategoryRepository categoryRepository, ApplicationDbContext context)
     {
         _categoryRepository = categoryRepository;
         _context = context;
-        _logger = logger;
     }
 
     private CategoryDto MapCategoryToDto(Category category) => new CategoryDto { Id = category.Id, Name = category.Name };
@@ -37,8 +34,7 @@ public class CategoryService : ICategoryService
     {
         if (await _categoryRepository.NameExistsForTenantAsync(categoryDto.Name, adminTenantId))
         {
-            _logger.LogWarning("CreateCategory: Duplicate name '{Name}' for Tenant {TenantId}", categoryDto.Name, adminTenantId);
-            return null; 
+            return null;
         }
 
         var category = new Category
@@ -52,24 +48,23 @@ public class CategoryService : ICategoryService
         return MapCategoryToDto(category);
     }
 
-        public async Task<bool> UpdateCategoryForAdminAsync(Guid categoryId, UpdateCategoryDto categoryDto, Guid adminTenantId)
+    public async Task<bool> UpdateCategoryForAdminAsync(Guid categoryId, UpdateCategoryDto categoryDto, Guid adminTenantId)
     {
-            var category = await _categoryRepository.GetByIdAndTenantAsync(categoryId, adminTenantId);
-            if (category == null) return false; 
+        var category = await _categoryRepository.GetByIdAndTenantAsync(categoryId, adminTenantId);
+        if (category == null) return false;
 
-            if (!category.Name.Equals(categoryDto.Name, StringComparison.OrdinalIgnoreCase))
+        if (!category.Name.Equals(categoryDto.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            if (await _categoryRepository.NameExistsForTenantAsync(categoryDto.Name, adminTenantId))
             {
-                if (await _categoryRepository.NameExistsForTenantAsync(categoryDto.Name, adminTenantId))
-                {
-                    _logger.LogWarning("UpdateCategory: Duplicate name '{Name}' for Tenant {TenantId}", categoryDto.Name, adminTenantId);
-                    return false; 
-                }
+                return false;
             }
+        }
 
-            category.Name = categoryDto.Name;
-            _categoryRepository.Update(category);
-            await _context.SaveChangesAsync();
-            return true;
+        category.Name = categoryDto.Name;
+        _categoryRepository.Update(category);
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     public async Task<bool> DeleteCategoryForAdminAsync(Guid categoryId, Guid adminTenantId)
@@ -80,14 +75,8 @@ public class CategoryService : ICategoryService
             await _context.SaveChangesAsync();
             return true;
         }
-        catch (InvalidOperationException ex) 
+        catch
         {
-            _logger.LogError(ex, "Error deleting category {CategoryId}: Cannot delete category with products.", categoryId);
-            return false;
-        }
-        catch(Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting category {CategoryId}", categoryId);
             var exists = await _categoryRepository.ExistsAsync(categoryId, adminTenantId);
             return !exists;
         }
