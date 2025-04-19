@@ -27,13 +27,14 @@ public class ProductRepository : IProductRepository
         {
             return Enumerable.Empty<Product>();
         }
-        return await GetAvailableProductsByTenantGuidAsync(tenantGuid.Value);
+        return await GetAvailableProductsByTenantIdAsync(tenantGuid.Value);
     }
 
-    public async Task<IEnumerable<Product>> GetAvailableProductsByTenantGuidAsync(Guid tenantId)
+    public async Task<IEnumerable<Product>> GetAvailableProductsByTenantIdAsync(Guid tenantId)
     {
         return await _context.Products
                         .Where(p => p.TenantId == tenantId && p.IsAvailable)
+                        .Include(p => p.Category)
                         .AsNoTracking()
                         .ToListAsync();
     }
