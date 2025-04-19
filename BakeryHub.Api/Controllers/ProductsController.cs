@@ -1,7 +1,7 @@
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity; 
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using BakeryHub.Domain.Entities;
 
@@ -9,19 +9,19 @@ namespace BakeryHub.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] 
-public class ProductsController : AdminControllerBase 
+[Authorize]
+public class ProductsController : AdminControllerBase
 {
     private readonly IProductService _productService;
 
     public ProductsController(IProductService productService, UserManager<ApplicationUser> userManager)
-        : base(userManager) 
+        : base(userManager)
     {
         _productService = productService;
     }
 
     [HttpGet]
-    [Authorize(Roles = "Admin")] 
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IEnumerable<ProductDto>>> GetAvailableProductsForAdmin()
@@ -34,11 +34,11 @@ public class ProductsController : AdminControllerBase
     }
 
     [HttpGet("category/{categoryId:guid}")]
-    [Authorize(Roles = "Admin, Customer")] 
+    [Authorize(Roles = "Admin, Customer")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)] 
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<IEnumerable<ProductDto>>> GetAvailableProductsByCategoryForAdmin(Guid categoryId)
     {
         var adminTenantId = await GetCurrentAdminTenantIdAsync();
@@ -50,7 +50,7 @@ public class ProductsController : AdminControllerBase
 
 
     [HttpGet("{id:guid}", Name = "GetProductById")]
-    [Authorize(Roles = "Admin")] 
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ProductDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
