@@ -79,7 +79,7 @@ builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.AllowedForNewUsers = true;
 
-    options.User.RequireUniqueEmail = true;
+    options.User.RequireUniqueEmail = false;
 
     options.SignIn.RequireConfirmedEmail = false;
 })

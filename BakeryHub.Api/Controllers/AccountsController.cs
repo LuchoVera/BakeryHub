@@ -112,4 +112,18 @@ public class AccountsController : ControllerBase
         var userInfo = await _accountService.GetCurrentUserAsync(user);
         return Ok(userInfo);
     }
+
+    [HttpGet("check-email")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(EmailCheckResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<EmailCheckResultDto>> CheckEmailExists([FromQuery] string email)
+    {
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+        {
+            return BadRequest(new { message = "Valid email is required." });
+        }
+        var result = await _accountService.CheckEmailAsync(email);
+        return Ok(result);
+    }
 }
