@@ -5,6 +5,6 @@ namespace BakeryHub.Application.Dtos;
 public class CreateCategoryDto
 {
     [Required]
-    [StringLength(150, MinimumLength = 3)]
+    [StringLength(30, MinimumLength = 3)]
     public required string Name { get; set; }
 }

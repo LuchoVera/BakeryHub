@@ -8,7 +8,7 @@ public class Product
     public decimal Price { get; set; }
     public bool IsAvailable { get; set; } = true;
     public List<string> Images { get; set; } = new List<string>();
-    public TimeSpan LeadTime { get; set; }
+    public string? LeadTime { get; set; }
 
     public Guid TenantId { get; set; }
     public virtual Tenant Tenant { get; set; } = null!;

@@ -26,11 +26,11 @@ public class AdminRegisterDto
     public required string PhoneNumber { get; set; }
 
     [Required]
-    [StringLength(200, MinimumLength = 3)]
+    [StringLength(50, MinimumLength = 3)]
     public required string BusinessName { get; set; }
 
     [Required]
     [RegularExpression(@"^[a-z0-9]+(?:-[a-z0-9]+)*$", ErrorMessage = "Subdomain must be lowercase alphanumeric with optional hyphens.")]
-    [StringLength(100, MinimumLength = 3)]
+    [StringLength(10, MinimumLength = 3)]
     public required string Subdomain { get; set; }
 }
