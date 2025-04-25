@@ -16,7 +16,7 @@ public class CreateProductDto
 
     public List<string>? Images { get; set; }
 
-    [StringLength(50)]
+    [StringLength(10)]
     public string? LeadTimeInput { get; set; }
 
     [Required]

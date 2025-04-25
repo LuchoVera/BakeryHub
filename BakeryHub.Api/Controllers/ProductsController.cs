@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using BakeryHub.Domain.Entities;
+using BakeryHub.Domain.Interfaces;
 
 namespace BakeryHub.Api.Controllers;
 
@@ -13,23 +14,26 @@ namespace BakeryHub.Api.Controllers;
 public class ProductsController : AdminControllerBase
 {
     private readonly IProductService _productService;
+    private readonly ITenantRepository _tenantRepository;
 
-    public ProductsController(IProductService productService, UserManager<ApplicationUser> userManager)
+
+    public ProductsController(IProductService productService, ITenantRepository tenantRepository, UserManager<ApplicationUser> userManager)
         : base(userManager)
     {
         _productService = productService;
+        _tenantRepository = tenantRepository;
     }
 
     [HttpGet]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<IEnumerable<ProductDto>>> GetAvailableProductsForAdmin()
+    public async Task<ActionResult<IEnumerable<ProductDto>>> GetAllProductsForAdmin()
     {
         var adminTenantId = await GetCurrentAdminTenantIdAsync();
         if (adminTenantId == null) return Forbid("Admin not associated with a tenant.");
 
-        var productDtos = await _productService.GetAvailableProductsForAdminAsync(adminTenantId.Value);
+        var productDtos = await _productService.GetAllProductsForAdminAsync(adminTenantId.Value);
         return Ok(productDtos);
     }
 
@@ -106,7 +110,7 @@ public class ProductsController : AdminControllerBase
         var adminTenantId = await GetCurrentAdminTenantIdAsync();
         if (adminTenantId == null) return Forbid("Admin not associated with a tenant.");
 
-        var success = await _productService.SetProductAvailabilityForAdminAsync(id, false, adminTenantId.Value);
+        var success = await _productService.DeleteProductForAdminAsync(id, adminTenantId.Value);
 
         if (!success) return NotFound($"Product with ID {id} not found for your tenant.");
         return NoContent();
@@ -127,5 +131,23 @@ public class ProductsController : AdminControllerBase
 
         if (!success) return NotFound($"Product with ID {id} not found for your tenant.");
         return NoContent();
+    }
+
+    [HttpGet("{subdomain}/products/{productId:guid}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ProductDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ProductDto>> GetPublicProductDetails(string subdomain, Guid productId)
+    {
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+
+        if (tenant == null) return NotFound($"Bakery '{subdomain}' not found.");
+
+        var productDto = await _productService.GetPublicProductByIdAsync(productId, tenant.Id);
+
+        if (productDto == null) return NotFound($"Product details not found or not available.");
+
+
+        return Ok(productDto);
     }
 }

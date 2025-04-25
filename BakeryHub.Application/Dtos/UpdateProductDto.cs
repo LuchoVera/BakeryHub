@@ -14,12 +14,9 @@ public class UpdateProductDto
     [Range(0.01, (double)decimal.MaxValue, ErrorMessage = "Price must be greater than 0.")]
     public decimal Price { get; set; }
 
-    [Required]
-    public bool IsAvailable { get; set; }
-
     public List<string>? Images { get; set; }
 
-    [StringLength(50)]
+    [StringLength(10)]
     public string? LeadTimeInput { get; set; }
 
     [Required]

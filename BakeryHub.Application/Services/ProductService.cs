@@ -22,9 +22,9 @@ public class ProductService : IProductService
         _context = context;
     }
 
-    public async Task<IEnumerable<ProductDto>> GetAvailableProductsForAdminAsync(Guid adminTenantId)
+    public async Task<IEnumerable<ProductDto>> GetAllProductsForAdminAsync(Guid adminTenantId)
     {
-        var products = await _productRepository.GetAvailableProductsByTenantIdAsync(adminTenantId);
+        var products = await _productRepository.GetAllProductsByTenantIdAsync(adminTenantId);
         var dtos = new List<ProductDto>();
         foreach (var p in products) { dtos.Add(await MapProductToDtoAsync(p)); }
         return dtos;
@@ -60,7 +60,7 @@ public class ProductService : IProductService
             Price = productDto.Price,
             IsAvailable = true,
             Images = productDto.Images ?? new List<string>(),
-            LeadTime = ParseLeadTime(productDto.LeadTimeInput),
+            LeadTime = productDto.LeadTimeInput,
             CategoryId = productDto.CategoryId,
             TenantId = adminTenantId
         };
@@ -84,9 +84,8 @@ public class ProductService : IProductService
         product.Name = productDto.Name;
         product.Description = productDto.Description;
         product.Price = productDto.Price;
-        product.IsAvailable = productDto.IsAvailable;
         product.Images = productDto.Images ?? new List<string>();
-        product.LeadTime = ParseLeadTime(productDto.LeadTimeInput);
+        product.LeadTime = productDto.LeadTimeInput;
         product.CategoryId = productDto.CategoryId;
         product.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -121,40 +120,15 @@ public class ProductService : IProductService
             Price = product.Price,
             IsAvailable = product.IsAvailable,
             Images = product.Images,
-            LeadTimeDisplay = FormatLeadTime(product.LeadTime),
+            LeadTimeDisplay = product.LeadTime ?? "N/A",
             CategoryId = product.CategoryId,
             CategoryName = categoryName
         };
     }
-    private string FormatLeadTime(TimeSpan leadTime)
-    {
-        if (leadTime == TimeSpan.Zero) return string.Empty;
-        if (Math.Abs(leadTime.TotalDays) >= 1) return $"{leadTime.TotalDays:0.#} day(s)";
-        if (Math.Abs(leadTime.TotalHours) >= 1) return $"{leadTime.TotalHours:0.#} hour(s)";
-        return $"{leadTime.TotalMinutes:0} minute(s)";
-    }
-    private TimeSpan ParseLeadTime(string? leadTimeInput)
-    {
-        if (string.IsNullOrWhiteSpace(leadTimeInput)) return TimeSpan.Zero;
-        leadTimeInput = leadTimeInput.ToLowerInvariant().Trim();
-        var parts = leadTimeInput.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length != 2 || !double.TryParse(parts[0], NumberStyles.Any, CultureInfo.InvariantCulture, out double value)) return TimeSpan.Zero;
-        try
-        {
-            return parts[1] switch
-            {
-                "day" or "days" => TimeSpan.FromDays(value),
-                "hour" or "hours" => TimeSpan.FromHours(value),
-                "minute" or "minutes" => TimeSpan.FromMinutes(value),
-                _ => TimeSpan.Zero
-            };
-        }
-        catch (OverflowException) { return TimeSpan.Zero; }
-    }
     public async Task<IEnumerable<ProductDto>> GetPublicProductsByTenantIdAsync(Guid tenantId)
     {
-        var products = await _productRepository.GetAvailableProductsByTenantIdAsync(tenantId);
-
+        var allProducts = await _productRepository.GetAllProductsByTenantIdAsync(tenantId);
+        var products = allProducts.Where(p => p.IsAvailable);
         if (products == null)
         {
             return Enumerable.Empty<ProductDto>();
@@ -165,5 +139,28 @@ public class ProductService : IProductService
             dtos.Add(await MapProductToDtoAsync(product));
         }
         return dtos;
+    }
+
+    public async Task<bool> DeleteProductForAdminAsync(Guid productId, Guid adminTenantId)
+    {
+        var product = await _productRepository.GetByIdAsync(productId);
+
+        if (product == null || product.TenantId != adminTenantId) return false;
+
+        if (product.IsAvailable) return false;
+
+        await _productRepository.DeleteAsync(productId);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<ProductDto?> GetPublicProductByIdAsync(Guid productId, Guid tenantId)
+    {
+        var product = await _productRepository.GetByIdAsync(productId);
+
+        if (product == null || product.TenantId != tenantId || !product.IsAvailable)
+            return null;
+
+        return await MapProductToDtoAsync(product);
     }
 }
