@@ -27,13 +27,17 @@ public class ProductRepository : IProductRepository
         {
             return Enumerable.Empty<Product>();
         }
-        return await GetAvailableProductsByTenantIdAsync(tenantGuid.Value);
+        return await _context.Products
+                        .Where(p => p.TenantId == tenantGuid.Value && p.IsAvailable)
+                        .Include(p => p.Category)
+                        .AsNoTracking()
+                        .ToListAsync();
     }
 
-    public async Task<IEnumerable<Product>> GetAvailableProductsByTenantIdAsync(Guid tenantId)
+    public async Task<IEnumerable<Product>> GetAllProductsByTenantIdAsync(Guid tenantId)
     {
         return await _context.Products
-                        .Where(p => p.TenantId == tenantId && p.IsAvailable)
+                        .Where(p => p.TenantId == tenantId)
                         .Include(p => p.Category)
                         .AsNoTracking()
                         .ToListAsync();
@@ -41,10 +45,10 @@ public class ProductRepository : IProductRepository
 
     public async Task<IEnumerable<Product>> GetAvailableProductsByCategoryAndTenantGuidAsync(Guid categoryId, Guid tenantId)
     {
-            return await _context.Products
-                        .Where(p => p.TenantId == tenantId && p.CategoryId == categoryId && p.IsAvailable)
-                        .AsNoTracking()
-                        .ToListAsync();
+        return await _context.Products
+                    .Where(p => p.TenantId == tenantId && p.CategoryId == categoryId && p.IsAvailable)
+                    .AsNoTracking()
+                    .ToListAsync();
     }
 
     public async Task<Product?> GetByIdAsync(Guid productId)
@@ -60,5 +64,14 @@ public class ProductRepository : IProductRepository
     public void Update(Product product)
     {
         _context.Entry(product).State = EntityState.Modified;
+    }
+    
+    public async Task DeleteAsync(Guid productId)
+    {
+        var product = await _context.Products.FindAsync(productId);
+        if (product != null)
+        {
+            _context.Products.Remove(product);
+        }
     }
 }
