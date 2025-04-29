@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Dtos.Enums;
 using BakeryHub.Application.Interfaces;
@@ -14,15 +15,19 @@ public class PublicTenantsController : ControllerBase
     private readonly ITenantRepository _tenantRepository;
     private readonly IAccountService _accountService;
     private readonly IProductService _productService;
+    private readonly IRecommendationService _recommendationService;
+
 
     public PublicTenantsController(
         ITenantRepository tenantRepository,
         IProductService productService,
-        IAccountService accountService)
+        IAccountService accountService,
+        IRecommendationService recommendationService)
     {
         _tenantRepository = tenantRepository;
         _productService = productService;
         _accountService = accountService;
+        _recommendationService = recommendationService;
     }
 
     [HttpGet("{subdomain}")]
@@ -174,6 +179,45 @@ public class PublicTenantsController : ControllerBase
             default:
                 ModelState.AddModelError("LinkingFailed", linkResult.IdentityResult.Errors.FirstOrDefault()?.Description ?? "Failed to link the account due to an unexpected error.");
                 return BadRequest(new ValidationProblemDetails(ModelState) { Title = "Linking Failed" });
+        }
+    }
+
+    [HttpGet("{subdomain}/recommendations")]
+    [Authorize]
+    [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<IEnumerable<ProductDto>>> GetRecommendations(string subdomain)
+    {
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null)
+        {
+            return NotFound($"Tenant '{subdomain}' not found.");
+        }
+
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out Guid userId))
+        {
+            return Unauthorized("Cannot identify logged in user.");
+        }
+
+        try
+        {
+            var recommendations = await _recommendationService.GetRecommendationsAsync(userId, tenant.Id, 10);
+
+            if (recommendations == null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, "Recommendation service is not ready.");
+            }
+
+            return Ok(recommendations);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error getting recommendations for user {userId} in tenant {tenant.Id}: {ex}");
+            return StatusCode(StatusCodes.Status500InternalServerError, "An error occurred while generating recommendations.");
         }
     }
 }

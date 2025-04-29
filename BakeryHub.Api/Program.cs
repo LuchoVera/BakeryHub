@@ -9,6 +9,7 @@ using BakeryHub.Infrastructure.Persistence.Repositories;
 using BakeryHub.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.ML;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -120,11 +121,20 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<ITenantManagementService, TenantManagementService>();
+builder.Services.AddSingleton<MLContext>();
+builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+
 
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
+    /*using (var scope = app.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
+        await DbInitializer.InitializeAsync(services);
+       
+    }*/
     app.UseDeveloperExceptionPage();
     app.UseSwagger();
     app.UseSwaggerUI(c =>
