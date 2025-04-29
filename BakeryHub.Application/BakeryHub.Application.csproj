@@ -4,6 +4,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
     <PackageReference Include="Microsoft.Extensions.Identity.Stores" Version="9.0.4" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.ML" Version="4.0.2" />
 
   </ItemGroup>
 
