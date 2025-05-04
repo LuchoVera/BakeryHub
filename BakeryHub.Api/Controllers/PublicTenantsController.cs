@@ -220,4 +220,35 @@ public class PublicTenantsController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError, "An error occurred while generating recommendations.");
         }
     }
+
+    [HttpGet("{subdomain}/search")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<ProductDto>>> SearchProductsByName(
+    string subdomain,
+    [FromQuery] string q)
+    {
+        if (string.IsNullOrWhiteSpace(subdomain))
+        {
+            return BadRequest("Subdomain cannot be empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(q))
+        {
+
+            return BadRequest("Search query cannot be empty.");
+
+        }
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null)
+        {
+            return NotFound($"Tenant '{subdomain}' not found.");
+        }
+
+        var productDtos = await _productService.SearchPublicProductsByNameAsync(tenant.Id, q);
+        return Ok(productDtos);
+    }
 }
