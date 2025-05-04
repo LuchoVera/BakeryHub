@@ -74,4 +74,25 @@ public class ProductRepository : IProductRepository
             _context.Products.Remove(product);
         }
     }
+
+    public async Task<IEnumerable<Product>> SearchPublicProductsByNameAsync(Guid tenantId, string searchTerm)
+    {
+        var searchTermLower = searchTerm.ToLowerInvariant().Trim();
+
+        var query = _context.Products
+                        .Where(p => p.TenantId == tenantId && !string.IsNullOrEmpty(p.Name));
+
+        if (!string.IsNullOrWhiteSpace(searchTermLower))
+        {
+            query = query.Where(p => p.Name.ToLower().Contains(searchTermLower));
+        }
+        else
+        {
+            return Enumerable.Empty<Product>();
+        }
+
+        return await query.Include(p => p.Category)
+                          .AsNoTracking()
+                          .ToListAsync();
+    }
 }

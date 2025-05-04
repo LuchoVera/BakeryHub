@@ -163,4 +163,17 @@ public class ProductService : IProductService
 
         return await MapProductToDtoAsync(product);
     }
+
+    public async Task<IEnumerable<ProductDto>> SearchPublicProductsByNameAsync(Guid tenantId, string searchTerm)
+    {
+        var searchedProducts = await _productRepository.SearchPublicProductsByNameAsync(tenantId, searchTerm);
+        var availableProducts = searchedProducts.Where(p => p.IsAvailable);
+        var dtos = new List<ProductDto>();
+
+        foreach (var product in availableProducts)
+        {
+            dtos.Add(await MapProductToDtoAsync(product));
+        }
+        return dtos;
+    }
 }

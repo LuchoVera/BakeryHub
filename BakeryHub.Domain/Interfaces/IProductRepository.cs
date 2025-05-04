@@ -11,4 +11,5 @@ public interface IProductRepository
     Task AddAsync(Product product);
     void Update(Product product);
     Task DeleteAsync(Guid productId);
+    Task<IEnumerable<Product>> SearchPublicProductsByNameAsync(Guid tenantId, string searchTerm);
 }
