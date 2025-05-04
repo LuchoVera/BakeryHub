@@ -13,4 +13,5 @@ public interface IProductService
     Task<IEnumerable<ProductDto>> GetPublicProductsByTenantIdAsync(Guid tenantId);
     Task<bool> DeleteProductForAdminAsync(Guid productId, Guid adminTenantId);
     Task<ProductDto?> GetPublicProductByIdAsync(Guid productId, Guid tenantId);
+    Task<IEnumerable<ProductDto>> SearchPublicProductsByNameAsync(Guid tenantId, string searchTerm);
 }
