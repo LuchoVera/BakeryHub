@@ -10,8 +10,18 @@ public interface IProductService
     Task<ProductDto?> CreateProductForAdminAsync(CreateProductDto productDto, Guid adminTenantId);
     Task<bool> UpdateProductForAdminAsync(Guid productId, UpdateProductDto productDto, Guid adminTenantId);
     Task<bool> SetProductAvailabilityForAdminAsync(Guid productId, bool isAvailable, Guid adminTenantId);
-    Task<IEnumerable<ProductDto>> GetPublicProductsByTenantIdAsync(Guid tenantId);
-    Task<bool> DeleteProductForAdminAsync(Guid productId, Guid adminTenantId);
+    Task<IEnumerable<ProductDto>> GetPublicProductsByTenantIdAsync(
+           Guid tenantId,
+           string? searchTerm = null,
+           Guid? categoryId = null,
+           decimal? minPrice = null,
+           decimal? maxPrice = null
+       ); Task<bool> DeleteProductForAdminAsync(Guid productId, Guid adminTenantId);
     Task<ProductDto?> GetPublicProductByIdAsync(Guid productId, Guid tenantId);
-    Task<IEnumerable<ProductDto>> SearchPublicProductsByNameAsync(Guid tenantId, string searchTerm);
+    Task<IEnumerable<ProductDto>> SearchPublicProductsByNameAsync(
+            Guid tenantId,
+            string searchTerm,
+            Guid? categoryId = null,
+            decimal? minPrice = null,
+            decimal? maxPrice = null);
 }

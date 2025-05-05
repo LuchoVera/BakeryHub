@@ -125,16 +125,25 @@ public class ProductService : IProductService
             CategoryName = categoryName
         };
     }
-    public async Task<IEnumerable<ProductDto>> GetPublicProductsByTenantIdAsync(Guid tenantId)
+    public async Task<IEnumerable<ProductDto>> GetPublicProductsByTenantIdAsync(
+            Guid tenantId,
+            string? searchTerm = null,
+            Guid? categoryId = null,
+            decimal? minPrice = null,
+            decimal? maxPrice = null
+            )
     {
-        var allProducts = await _productRepository.GetAllProductsByTenantIdAsync(tenantId);
-        var products = allProducts.Where(p => p.IsAvailable);
-        if (products == null)
-        {
-            return Enumerable.Empty<ProductDto>();
-        }
+        var allTenantProducts = await _productRepository.GetAllProductsByTenantIdAsync(
+             tenantId,
+             searchTerm,
+             categoryId,
+             minPrice,
+             maxPrice
+        );
+
+        var availableProducts = allTenantProducts.Where(p => p.IsAvailable);
         var dtos = new List<ProductDto>();
-        foreach (var product in products)
+        foreach (var product in availableProducts)
         {
             dtos.Add(await MapProductToDtoAsync(product));
         }
@@ -164,12 +173,19 @@ public class ProductService : IProductService
         return await MapProductToDtoAsync(product);
     }
 
-    public async Task<IEnumerable<ProductDto>> SearchPublicProductsByNameAsync(Guid tenantId, string searchTerm)
+    public async Task<IEnumerable<ProductDto>> SearchPublicProductsByNameAsync(
+        Guid tenantId,
+        string searchTerm,
+        Guid? categoryId = null,
+        decimal? minPrice = null,
+        decimal? maxPrice = null)
     {
-        var searchedProducts = await _productRepository.SearchPublicProductsByNameAsync(tenantId, searchTerm);
-        var availableProducts = searchedProducts.Where(p => p.IsAvailable);
-        var dtos = new List<ProductDto>();
+        var searchedProducts = await _productRepository.SearchPublicProductsByNameAsync(
+            tenantId, searchTerm, categoryId, minPrice, maxPrice);
 
+        var availableProducts = searchedProducts.Where(p => p.IsAvailable);
+
+        var dtos = new List<ProductDto>();
         foreach (var product in availableProducts)
         {
             dtos.Add(await MapProductToDtoAsync(product));
