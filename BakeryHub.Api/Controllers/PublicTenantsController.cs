@@ -51,20 +51,33 @@ public class PublicTenantsController : ControllerBase
     [AllowAnonymous]
     [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<IEnumerable<ProductDto>>> GetTenantPublicProducts(string subdomain)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IEnumerable<ProductDto>>> GetTenantPublicProducts(
+        string subdomain,
+        [FromQuery] Guid? categoryId = null,
+        [FromQuery] decimal? minPrice = null,
+        [FromQuery] decimal? maxPrice = null
+        )
     {
         if (string.IsNullOrWhiteSpace(subdomain))
-        {
             return BadRequest("Subdomain cannot be empty.");
-        }
+
+        if (minPrice.HasValue && minPrice < 0) return BadRequest("Minimum price cannot be negative.");
+        if (maxPrice.HasValue && maxPrice < 0) return BadRequest("Maximum price cannot be negative.");
+        if (minPrice.HasValue && maxPrice.HasValue && minPrice > maxPrice) return BadRequest("Minimum price cannot be greater than maximum price.");
 
         var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
         if (tenant == null)
-        {
             return NotFound($"Tenant '{subdomain}' not found.");
-        }
 
-        var productDtos = await _productService.GetPublicProductsByTenantIdAsync(tenant.Id);
+        var productDtos = await _productService.GetPublicProductsByTenantIdAsync(
+            tenant.Id,
+            null,
+            categoryId,
+            minPrice,
+            maxPrice
+            );
+
         return Ok(productDtos);
     }
 
@@ -227,28 +240,33 @@ public class PublicTenantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IEnumerable<ProductDto>>> SearchProductsByName(
-    string subdomain,
-    [FromQuery] string q)
+        string subdomain,
+        [FromQuery] string q,
+        [FromQuery] Guid? categoryId = null,
+        [FromQuery] decimal? minPrice = null,
+        [FromQuery] decimal? maxPrice = null
+        )
     {
         if (string.IsNullOrWhiteSpace(subdomain))
-        {
             return BadRequest("Subdomain cannot be empty.");
-        }
-
         if (string.IsNullOrWhiteSpace(q))
-        {
+            return BadRequest("Search query 'q' cannot be empty.");
 
-            return BadRequest("Search query cannot be empty.");
+        if (minPrice.HasValue && minPrice < 0)
+            return BadRequest("Minimum price cannot be negative.");
+        if (maxPrice.HasValue && maxPrice < 0)
+            return BadRequest("Maximum price cannot be negative.");
+        if (minPrice.HasValue && maxPrice.HasValue && minPrice > maxPrice)
+            return BadRequest("Minimum price cannot be greater than maximum price.");
 
-        }
 
         var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
         if (tenant == null)
-        {
             return NotFound($"Tenant '{subdomain}' not found.");
-        }
 
-        var productDtos = await _productService.SearchPublicProductsByNameAsync(tenant.Id, q);
+        var productDtos = await _productService.SearchPublicProductsByNameAsync(
+            tenant.Id, q, categoryId, minPrice, maxPrice);
+
         return Ok(productDtos);
     }
 }
