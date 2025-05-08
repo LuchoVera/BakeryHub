@@ -16,18 +16,20 @@ public class PublicTenantsController : ControllerBase
     private readonly IAccountService _accountService;
     private readonly IProductService _productService;
     private readonly IRecommendationService _recommendationService;
-
+    private readonly IOrderService _orderService;
 
     public PublicTenantsController(
         ITenantRepository tenantRepository,
         IProductService productService,
         IAccountService accountService,
-        IRecommendationService recommendationService)
+        IRecommendationService recommendationService,
+        IOrderService orderService)
     {
         _tenantRepository = tenantRepository;
         _productService = productService;
         _accountService = accountService;
         _recommendationService = recommendationService;
+        _orderService = orderService;
     }
 
     [HttpGet("{subdomain}")]
@@ -42,7 +44,8 @@ public class PublicTenantsController : ControllerBase
         var tenantInfo = new TenantPublicInfoDto
         {
             Name = tenant.Name,
-            Subdomain = tenant.Subdomain
+            Subdomain = tenant.Subdomain,
+            PhoneNumber = tenant?.PhoneNumber
         };
         return Ok(tenantInfo);
     }
@@ -269,4 +272,72 @@ public class PublicTenantsController : ControllerBase
 
         return Ok(productDtos);
     }
+
+    [HttpPost("{subdomain}/orders")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(OrderDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OrderDto>> CreateOrder(
+        string subdomain,
+        [FromBody] CreateOrderDto createOrderDto)
+    {
+        if (string.IsNullOrWhiteSpace(subdomain)) return BadRequest("Subdomain no puede estar vacío.");
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null) return NotFound($"Tenant '{subdomain}' no encontrado.");
+
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out Guid applicationUserId)) return Unauthorized("Usuario no identificado.");
+
+        var createdOrderDto = await _orderService.CreateOrderAsync(tenant.Id, applicationUserId, createOrderDto);
+        if (createdOrderDto == null) return BadRequest("No se pudo crear el pedido. Verifique los items o intente más tarde.");
+
+        return CreatedAtAction(nameof(GetOrderDetailsForCustomer),
+            new { subdomain = subdomain, orderId = createdOrderDto.Id },
+            createdOrderDto);
+    }
+
+    [HttpGet("{subdomain}/orders")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(IEnumerable<OrderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<OrderDto>>> GetMyOrderHistory(string subdomain)
+    {
+        if (string.IsNullOrWhiteSpace(subdomain)) return BadRequest("Subdomain no puede estar vacío.");
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null) return NotFound($"Tenant '{subdomain}' no encontrado.");
+
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out Guid applicationUserId)) return Unauthorized("Usuario no identificado.");
+
+        var orders = await _orderService.GetOrderHistoryForCustomerAsync(applicationUserId, tenant.Id);
+        return Ok(orders);
+    }
+
+    [HttpGet("{subdomain}/orders/{orderId:guid}", Name = "GetOrderDetailsForCustomer")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OrderDto>> GetOrderDetailsForCustomer(string subdomain, Guid orderId)
+    {
+        if (string.IsNullOrWhiteSpace(subdomain)) return BadRequest("Subdomain no puede estar vacío.");
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null) return NotFound($"Tenant '{subdomain}' no encontrado.");
+
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out Guid applicationUserId)) return Unauthorized("Usuario no identificado.");
+
+        var orderDto = await _orderService.GetOrderDetailsForCustomerAsync(orderId, applicationUserId, tenant.Id);
+        if (orderDto == null) return NotFound($"Pedido con ID '{orderId}' no encontrado o no pertenece a este usuario/tienda.");
+
+        return Ok(orderDto);
+    }
+
 }
