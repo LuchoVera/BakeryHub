@@ -60,7 +60,13 @@ public class AccountService : IAccountService
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var tenant = new Tenant { Id = Guid.NewGuid(), Name = dto.BusinessName, Subdomain = subdomainLower };
+                var tenant = new Tenant
+                {
+                    Id = Guid.NewGuid(),
+                    Name = dto.BusinessName,
+                    Subdomain = subdomainLower,
+                    PhoneNumber = dto.PhoneNumber
+                };
                 await _tenantRepository.AddAsync(tenant);
                 await _context.SaveChangesAsync();
 
