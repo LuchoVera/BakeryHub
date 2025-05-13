@@ -28,6 +28,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
         ConfigureProduct(builder);
         ConfigureOrder(builder);
         ConfigureOrderItem(builder);
+
+        builder.Entity<Product>().HasQueryFilter(p => !p.IsDeleted);
+        builder.Entity<Category>().HasQueryFilter(c => !c.IsDeleted);
     }
 
     private static void ConfigureApplicationUser(ModelBuilder builder)
@@ -99,6 +102,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             entity.HasOne(c => c.Tenant)
                   .WithMany(t => t.Categories)
                   .HasForeignKey(c => c.TenantId);
+            
+            entity.Property(c => c.IsDeleted).HasDefaultValue(false);
+            entity.HasIndex(c => c.IsDeleted);
         });
     }
 
@@ -124,6 +130,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             entity.HasOne(p => p.Category)
                   .WithMany(c => c.Products)
                   .HasForeignKey(p => p.CategoryId);
+            entity.Property(p => p.IsDeleted).HasDefaultValue(false);
+            entity.HasIndex(p => p.IsDeleted);
         });
     }
 
