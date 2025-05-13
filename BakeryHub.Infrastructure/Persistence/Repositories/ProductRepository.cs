@@ -34,13 +34,43 @@ public class ProductRepository : IProductRepository
                         .ToListAsync();
     }
 
-    public async Task<IEnumerable<Product>> GetAllProductsByTenantIdAsync(Guid tenantId)
+    public async Task<IEnumerable<Product>> GetAllProductsByTenantIdAsync(
+        Guid tenantId,
+        string? searchTerm = null,
+        Guid? categoryId = null,
+        decimal? minPrice = null,
+        decimal? maxPrice = null
+        )
     {
-        return await _context.Products
+        var query = _context.Products
                         .Where(p => p.TenantId == tenantId)
-                        .Include(p => p.Category)
-                        .AsNoTracking()
-                        .ToListAsync();
+                        .AsNoTracking();
+
+        if (categoryId.HasValue && categoryId.Value != Guid.Empty)
+        {
+            query = query.Where(p => p.CategoryId == categoryId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var searchTermLower = searchTerm.ToLowerInvariant().Trim();
+            query = query.Where(p =>
+                (p.Name != null && p.Name.ToLower().Contains(searchTermLower)) ||
+                (p.Description != null && p.Description.ToLower().Contains(searchTermLower))
+            );
+        }
+
+        if (minPrice.HasValue)
+        {
+            query = query.Where(p => p.Price >= minPrice.Value);
+        }
+        if (maxPrice.HasValue && maxPrice.Value >= 0)
+        {
+            query = query.Where(p => p.Price <= maxPrice.Value);
+        }
+        return await query
+                     .Include(p => p.Category)
+                     .ToListAsync();
     }
 
     public async Task<IEnumerable<Product>> GetAvailableProductsByCategoryAndTenantGuidAsync(Guid categoryId, Guid tenantId)
@@ -65,7 +95,7 @@ public class ProductRepository : IProductRepository
     {
         _context.Entry(product).State = EntityState.Modified;
     }
-    
+
     public async Task DeleteAsync(Guid productId)
     {
         var product = await _context.Products.FindAsync(productId);
@@ -73,5 +103,46 @@ public class ProductRepository : IProductRepository
         {
             _context.Products.Remove(product);
         }
+    }
+
+    public async Task<IEnumerable<Product>> SearchPublicProductsByNameAsync(
+        Guid tenantId,
+        string searchTerm,
+        Guid? categoryId = null,
+        decimal? minPrice = null,
+        decimal? maxPrice = null)
+    {
+        var searchTermLower = searchTerm.ToLowerInvariant().Trim();
+
+        IQueryable<Product> query = _context.Products
+                                       .Where(p => p.TenantId == tenantId && !string.IsNullOrEmpty(p.Name))
+                                       .AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(searchTermLower))
+        {
+            query = query.Where(p => p.Name.ToLower().Contains(searchTermLower));
+        }
+        else
+        {
+            return Enumerable.Empty<Product>();
+        }
+
+        if (categoryId.HasValue && categoryId.Value != Guid.Empty)
+        {
+            query = query.Where(p => p.CategoryId == categoryId.Value);
+        }
+
+        if (minPrice.HasValue)
+        {
+            query = query.Where(p => p.Price >= minPrice.Value);
+        }
+
+        if (maxPrice.HasValue && maxPrice.Value >= 0)
+        {
+            query = query.Where(p => p.Price <= maxPrice.Value);
+        }
+
+        return await query
+                      .Include(p => p.Category)
+                      .ToListAsync();
     }
 }

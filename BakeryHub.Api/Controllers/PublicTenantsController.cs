@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Dtos.Enums;
 using BakeryHub.Application.Interfaces;
@@ -14,15 +15,21 @@ public class PublicTenantsController : ControllerBase
     private readonly ITenantRepository _tenantRepository;
     private readonly IAccountService _accountService;
     private readonly IProductService _productService;
+    private readonly IRecommendationService _recommendationService;
+    private readonly IOrderService _orderService;
 
     public PublicTenantsController(
         ITenantRepository tenantRepository,
         IProductService productService,
-        IAccountService accountService)
+        IAccountService accountService,
+        IRecommendationService recommendationService,
+        IOrderService orderService)
     {
         _tenantRepository = tenantRepository;
         _productService = productService;
         _accountService = accountService;
+        _recommendationService = recommendationService;
+        _orderService = orderService;
     }
 
     [HttpGet("{subdomain}")]
@@ -37,7 +44,8 @@ public class PublicTenantsController : ControllerBase
         var tenantInfo = new TenantPublicInfoDto
         {
             Name = tenant.Name,
-            Subdomain = tenant.Subdomain
+            Subdomain = tenant.Subdomain,
+            PhoneNumber = tenant?.PhoneNumber
         };
         return Ok(tenantInfo);
     }
@@ -46,20 +54,33 @@ public class PublicTenantsController : ControllerBase
     [AllowAnonymous]
     [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<IEnumerable<ProductDto>>> GetTenantPublicProducts(string subdomain)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IEnumerable<ProductDto>>> GetTenantPublicProducts(
+        string subdomain,
+        [FromQuery] Guid? categoryId = null,
+        [FromQuery] decimal? minPrice = null,
+        [FromQuery] decimal? maxPrice = null
+        )
     {
         if (string.IsNullOrWhiteSpace(subdomain))
-        {
             return BadRequest("Subdomain cannot be empty.");
-        }
+
+        if (minPrice.HasValue && minPrice < 0) return BadRequest("Minimum price cannot be negative.");
+        if (maxPrice.HasValue && maxPrice < 0) return BadRequest("Maximum price cannot be negative.");
+        if (minPrice.HasValue && maxPrice.HasValue && minPrice > maxPrice) return BadRequest("Minimum price cannot be greater than maximum price.");
 
         var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
         if (tenant == null)
-        {
             return NotFound($"Tenant '{subdomain}' not found.");
-        }
 
-        var productDtos = await _productService.GetPublicProductsByTenantIdAsync(tenant.Id);
+        var productDtos = await _productService.GetPublicProductsByTenantIdAsync(
+            tenant.Id,
+            null,
+            categoryId,
+            minPrice,
+            maxPrice
+            );
+
         return Ok(productDtos);
     }
 
@@ -176,4 +197,147 @@ public class PublicTenantsController : ControllerBase
                 return BadRequest(new ValidationProblemDetails(ModelState) { Title = "Linking Failed" });
         }
     }
+
+    [HttpGet("{subdomain}/recommendations")]
+    [Authorize]
+    [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<IEnumerable<ProductDto>>> GetRecommendations(string subdomain)
+    {
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null)
+        {
+            return NotFound($"Tenant '{subdomain}' not found.");
+        }
+
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out Guid userId))
+        {
+            return Unauthorized("Cannot identify logged in user.");
+        }
+
+        try
+        {
+            var recommendations = await _recommendationService.GetRecommendationsAsync(userId, tenant.Id, 10);
+
+            if (recommendations == null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, "Recommendation service is not ready.");
+            }
+
+            return Ok(recommendations);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error getting recommendations for user {userId} in tenant {tenant.Id}: {ex}");
+            return StatusCode(StatusCodes.Status500InternalServerError, "An error occurred while generating recommendations.");
+        }
+    }
+
+    [HttpGet("{subdomain}/search")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<ProductDto>>> SearchProductsByName(
+        string subdomain,
+        [FromQuery] string q,
+        [FromQuery] Guid? categoryId = null,
+        [FromQuery] decimal? minPrice = null,
+        [FromQuery] decimal? maxPrice = null
+        )
+    {
+        if (string.IsNullOrWhiteSpace(subdomain))
+            return BadRequest("Subdomain cannot be empty.");
+        if (string.IsNullOrWhiteSpace(q))
+            return BadRequest("Search query 'q' cannot be empty.");
+
+        if (minPrice.HasValue && minPrice < 0)
+            return BadRequest("Minimum price cannot be negative.");
+        if (maxPrice.HasValue && maxPrice < 0)
+            return BadRequest("Maximum price cannot be negative.");
+        if (minPrice.HasValue && maxPrice.HasValue && minPrice > maxPrice)
+            return BadRequest("Minimum price cannot be greater than maximum price.");
+
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null)
+            return NotFound($"Tenant '{subdomain}' not found.");
+
+        var productDtos = await _productService.SearchPublicProductsByNameAsync(
+            tenant.Id, q, categoryId, minPrice, maxPrice);
+
+        return Ok(productDtos);
+    }
+
+    [HttpPost("{subdomain}/orders")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(OrderDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OrderDto>> CreateOrder(
+        string subdomain,
+        [FromBody] CreateOrderDto createOrderDto)
+    {
+        if (string.IsNullOrWhiteSpace(subdomain)) return BadRequest("Subdomain no puede estar vacío.");
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null) return NotFound($"Tenant '{subdomain}' no encontrado.");
+
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out Guid applicationUserId)) return Unauthorized("Usuario no identificado.");
+
+        var createdOrderDto = await _orderService.CreateOrderAsync(tenant.Id, applicationUserId, createOrderDto);
+        if (createdOrderDto == null) return BadRequest("No se pudo crear el pedido. Verifique los items o intente más tarde.");
+
+        return CreatedAtAction(nameof(GetOrderDetailsForCustomer),
+            new { subdomain = subdomain, orderId = createdOrderDto.Id },
+            createdOrderDto);
+    }
+
+    [HttpGet("{subdomain}/orders")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(IEnumerable<OrderDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<OrderDto>>> GetMyOrderHistory(string subdomain)
+    {
+        if (string.IsNullOrWhiteSpace(subdomain)) return BadRequest("Subdomain no puede estar vacío.");
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null) return NotFound($"Tenant '{subdomain}' no encontrado.");
+
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out Guid applicationUserId)) return Unauthorized("Usuario no identificado.");
+
+        var orders = await _orderService.GetOrderHistoryForCustomerAsync(applicationUserId, tenant.Id);
+        return Ok(orders);
+    }
+
+    [HttpGet("{subdomain}/orders/{orderId:guid}", Name = "GetOrderDetailsForCustomer")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OrderDto>> GetOrderDetailsForCustomer(string subdomain, Guid orderId)
+    {
+        if (string.IsNullOrWhiteSpace(subdomain)) return BadRequest("Subdomain no puede estar vacío.");
+
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null) return NotFound($"Tenant '{subdomain}' no encontrado.");
+
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out Guid applicationUserId)) return Unauthorized("Usuario no identificado.");
+
+        var orderDto = await _orderService.GetOrderDetailsForCustomerAsync(orderId, applicationUserId, tenant.Id);
+        if (orderDto == null) return NotFound($"Pedido con ID '{orderId}' no encontrado o no pertenece a este usuario/tienda.");
+
+        return Ok(orderDto);
+    }
+
 }

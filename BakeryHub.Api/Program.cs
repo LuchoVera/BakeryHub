@@ -1,4 +1,3 @@
-using BakeryHub.Api.Middleware;
 using BakeryHub.Infrastructure.Persistence;
 using Microsoft.OpenApi.Models;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +8,12 @@ using BakeryHub.Infrastructure.Persistence.Repositories;
 using BakeryHub.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.ML;
+using BakeryHub.Api.Initialization;
+using System.Text.Json.Serialization;
+using BakeryHub.Application.Interfaces.BackgroundServices;
+using BakeryHub.Api.BackgroundServices;
+using BakeryHub.Application.Services.BackgroundServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,34 +35,16 @@ builder.Services.AddCors(options =>
                       });
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        {
+            options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        });
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "BakeryHub API", Version = "v1" });
-
-    options.AddSecurityDefinition("TenantIdHeader", new OpenApiSecurityScheme
-    {
-        In = ParameterLocation.Header,
-        Name = TenantResolutionMiddleware.TenantIdHeaderName,
-        Type = SecuritySchemeType.ApiKey,
-        Description = "Tenant ID: (ej: 'tenantA', 'tenantB')"
-    });
-
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "TenantIdHeader"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
 });
 
 builder.Services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
@@ -114,17 +101,29 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 
-builder.Services.AddScoped<ITenantService, TenantService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<ITenantManagementService, TenantManagementService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddSingleton<MLContext>();
+builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+builder.Services.AddScoped<IModelRetrainingService, ModelRetrainingService>();
+builder.Services.AddHostedService<ScheduledRecommendationRetrainingService>();
+
 
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
+    /*using (var scope = app.Services.CreateScope())
+    {
+        var services = scope.ServiceProvider;
+        await DbInitializer.InitializeAsync(services);
+       
+    }*/
     app.UseDeveloperExceptionPage();
     app.UseSwagger();
     app.UseSwaggerUI(c =>
@@ -139,7 +138,6 @@ app.UseCors(MyAllowSpecificOrigins);
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseMiddleware<TenantResolutionMiddleware>();
 
 app.MapControllers();
 
