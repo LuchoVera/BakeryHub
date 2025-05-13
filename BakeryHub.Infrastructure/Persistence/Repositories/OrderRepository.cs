@@ -20,19 +20,45 @@ public class OrderRepository : IOrderRepository
 
     public async Task<Order?> GetOrderByIdAndTenantAsync(Guid orderId, Guid tenantId)
     {
-        return await _context.Orders
+        var order = await _context.Orders
             .Include(o => o.OrderItems)
-                .ThenInclude(oi => oi.Product)
             .Include(o => o.User)
+            .AsNoTracking()
             .FirstOrDefaultAsync(o => o.Id == orderId && o.TenantId == tenantId);
+
+        if (order != null && order.OrderItems != null)
+        {
+            foreach (var item in order.OrderItems)
+            {
+                await _context.Entry(item)
+                              .Reference(i => i.Product)
+                              .Query()
+                              .IgnoreQueryFilters()
+                              .LoadAsync();
+            }
+        }
+        return order;
     }
 
     public async Task<Order?> GetOrderByIdAndUserAsync(Guid orderId, Guid userId, Guid tenantId)
     {
-        return await _context.Orders
+        var order = await _context.Orders
             .Include(o => o.OrderItems)
-                .ThenInclude(oi => oi.Product)
+            .AsNoTracking()
             .FirstOrDefaultAsync(o => o.Id == orderId && o.ApplicationUserId == userId && o.TenantId == tenantId);
+
+        if (order != null && order.OrderItems != null)
+        {
+            foreach (var item in order.OrderItems)
+            {
+                await _context.Entry(item)
+                              .Reference(i => i.Product)
+                              .Query()
+                              .IgnoreQueryFilters()
+                              .LoadAsync();
+            }
+        }
+        return order;
     }
 
     public async Task<IEnumerable<Order>> GetOrdersByUserIdAndTenantAsync(Guid userId, Guid tenantId)
@@ -40,6 +66,7 @@ public class OrderRepository : IOrderRepository
         return await _context.Orders
             .Where(o => o.ApplicationUserId == userId && o.TenantId == tenantId)
             .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Product)
             .OrderByDescending(o => o.OrderDate)
             .AsNoTracking()
             .ToListAsync();
@@ -50,6 +77,7 @@ public class OrderRepository : IOrderRepository
         return await _context.Orders
             .Where(o => o.TenantId == tenantId)
             .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Product)
             .Include(o => o.User)
             .OrderByDescending(o => o.OrderDate)
             .AsNoTracking()
@@ -61,5 +89,4 @@ public class OrderRepository : IOrderRepository
         order.UpdatedAt = DateTimeOffset.UtcNow;
         _context.Orders.Update(order);
     }
-
 }
