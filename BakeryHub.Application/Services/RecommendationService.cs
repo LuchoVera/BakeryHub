@@ -3,160 +3,221 @@ using BakeryHub.Application.Interfaces;
 using BakeryHub.Application.Recommendations;
 using BakeryHub.Domain.Entities;
 using BakeryHub.Domain.Interfaces;
+using BakeryHub.Infrastructure.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.ML;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.ML.Data;
+using System.Collections.Concurrent;
 
 namespace BakeryHub.Application.Services;
+
 public class RecommendationService : IRecommendationService
 {
     private readonly MLContext _mlContext;
     private readonly IProductRepository _productRepository;
+    private readonly ApplicationDbContext _dbContext;
     private readonly IConfiguration _configuration;
-    private readonly string _modelPath;
-    private readonly string _mockPurchasesPath;
-    private readonly string _mockDetailsPath;
-    private ITransformer? _trainedModel;
-    private PredictionEngine<ProductRating, ProductRatingPrediction>? _predictionEngine;
-    private DataMappings? _dataMappings;
+    private readonly string _modelBaseDirectory;
+
+    private readonly ConcurrentDictionary<Guid, ITransformer> _tenantModels = new();
+    private readonly ConcurrentDictionary<Guid, PredictionEngine<ProductRating, ProductRatingPrediction>> _tenantPredictionEngines = new();
+    private readonly ConcurrentDictionary<Guid, DataMappings> _tenantDataMappings = new();
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _tenantLocks = new();
 
     public RecommendationService(
         MLContext mlContext,
         IProductRepository productRepository,
+        ApplicationDbContext dbContext,
         IConfiguration configuration)
     {
         _mlContext = mlContext;
         _productRepository = productRepository;
+        _dbContext = dbContext;
         _configuration = configuration;
-        _mockPurchasesPath = _configuration["RecommendationSettings:PurchasesPath"] ?? "Resources/mock_compras.csv";
-        _mockDetailsPath = _configuration["RecommendationSettings:DetailsPath"] ?? "Resources/mock_detalles_compras.csv";
-        _modelPath = _configuration["RecommendationSettings:ModelPath"] ?? "recommendation_model.zip";
+
+        var configuredModelPath = _configuration["RecommendationSettings:ModelPath"];
+        if (string.IsNullOrWhiteSpace(configuredModelPath))
+        {
+            throw new InvalidOperationException("RecommendationSettings:ModelPath is not configured in appsettings.json.");
+        }
+
+        _modelBaseDirectory = Path.IsPathRooted(configuredModelPath)
+            ? configuredModelPath
+            : Path.Combine(AppContext.BaseDirectory, configuredModelPath);
+
+        if (!Directory.Exists(_modelBaseDirectory))
+        {
+            Directory.CreateDirectory(_modelBaseDirectory);
+        }
     }
 
-    private bool EnsureModelLoaded()
+    private string GetModelPathForTenant(Guid tenantId)
     {
-        if (_trainedModel != null && _predictionEngine != null && _dataMappings != null)
+        return Path.Combine(_modelBaseDirectory, $"model_tenant_{tenantId}.zip");
+    }
+
+    private SemaphoreSlim GetTenantLock(Guid tenantId)
+    {
+        return _tenantLocks.GetOrAdd(tenantId, _ => new SemaphoreSlim(1, 1));
+    }
+
+    private async Task<(PredictionEngine<ProductRating, ProductRatingPrediction>? Engine, DataMappings? Mappings)>
+        EnsureModelAndMappingsLoadedForTenantAsync(Guid tenantId)
+    {
+        if (_tenantPredictionEngines.TryGetValue(tenantId, out var cachedEngine) &&
+            _tenantDataMappings.TryGetValue(tenantId, out var cachedMappings))
         {
-            return true;
+            if (cachedEngine == null && (cachedMappings == null || !cachedMappings.ProductGuidToIntMap.Any()))
+            {
+                return (null, cachedMappings);
+            }
+            if (cachedEngine != null && cachedMappings != null && cachedMappings.ProductGuidToIntMap.Any())
+            {
+                return (cachedEngine, cachedMappings);
+            }
         }
+
+        var tenantLock = GetTenantLock(tenantId);
+        await tenantLock.WaitAsync();
 
         try
         {
-            if (_dataMappings == null)
+            if (_tenantPredictionEngines.TryGetValue(tenantId, out cachedEngine) &&
+                _tenantDataMappings.TryGetValue(tenantId, out cachedMappings))
             {
-                var dataLoader = new DataLoader(_mlContext);
-                _dataMappings = dataLoader.LoadMappingsAndHistory(_mockPurchasesPath, _mockDetailsPath);
-                if (_dataMappings == null || !_dataMappings.ProductGuidToIntMap.Any())
+                if (cachedEngine == null && (cachedMappings == null || !cachedMappings.ProductGuidToIntMap.Any()))
                 {
-                    return false;
+                    return (null, cachedMappings);
+                }
+                if (cachedEngine != null && cachedMappings != null && cachedMappings.ProductGuidToIntMap.Any())
+                {
+                    return (cachedEngine, cachedMappings);
                 }
             }
 
-            if (!File.Exists(_modelPath))
+            DataMappings? tenantDataMappings;
+            ITransformer? tenantTrainedModel = null;
+            PredictionEngine<ProductRating, ProductRatingPrediction>? predictionEngine = null;
+
+            var modelPathForTenant = GetModelPathForTenant(tenantId);
+            var dataLoader = new DataLoader(_mlContext, _dbContext);
+
+            tenantDataMappings = await dataLoader.LoadMappingsAndHistoryForTenantAsync(tenantId);
+
+            if (tenantDataMappings == null || !tenantDataMappings.ProductGuidToIntMap.Any() || !tenantDataMappings.UserGuidToFloatMap.Any())
             {
-#if DEBUG
-                bool trainingSuccess = TrainAndSaveModel();
-                if (!trainingSuccess)
-                {
-                    return false;
-                }
-#else
-                    return false;
-#endif
+                _tenantDataMappings[tenantId] = tenantDataMappings ?? new DataMappings();
+                _tenantModels.TryRemove(tenantId, out _);
+                _tenantPredictionEngines.TryRemove(tenantId, out _);
+                return (null, tenantDataMappings);
             }
-            else
+
+            if (File.Exists(modelPathForTenant))
             {
-                if (_trainedModel == null)
+                try
                 {
                     DataViewSchema modelSchema;
-                    _trainedModel = _mlContext.Model.Load(_modelPath, out modelSchema);
+                    tenantTrainedModel = _mlContext.Model.Load(modelPathForTenant, out modelSchema);
+                }
+                catch
+                {
+                    tenantTrainedModel = null;
                 }
             }
 
-            if (_trainedModel != null && _predictionEngine == null)
+            if (tenantTrainedModel == null)
             {
-                _predictionEngine = _mlContext.Model.CreatePredictionEngine<ProductRating, ProductRatingPrediction>(_trainedModel);
+                IDataView? trainData = dataLoader.LoadDataForTenant(tenantDataMappings);
+
+                if (trainData == null || trainData.GetColumn<float>(nameof(ProductRating.UserId)).Count() == 0)
+                {
+                    _tenantDataMappings[tenantId] = tenantDataMappings;
+                    return (null, tenantDataMappings);
+                }
+
+                var modelTrainer = new ModelTrainer(_mlContext);
+                try
+                {
+                    tenantTrainedModel = modelTrainer.TrainModel(trainData);
+                    _mlContext.Model.Save(tenantTrainedModel, trainData.Schema, modelPathForTenant);
+                }
+                catch
+                {
+                    tenantTrainedModel = null;
+                }
             }
 
-            return _trainedModel != null && _predictionEngine != null && _dataMappings != null;
-        }
-        catch (Exception)
-        {
-            _trainedModel = null;
-            _predictionEngine = null;
-            _dataMappings = null;
-            return false;
-        }
-    }
+            if (tenantTrainedModel != null)
+            {
+                predictionEngine = _mlContext.Model.CreatePredictionEngine<ProductRating, ProductRatingPrediction>(tenantTrainedModel);
+                _tenantModels[tenantId] = tenantTrainedModel;
+                _tenantPredictionEngines[tenantId] = predictionEngine;
+            }
 
-    private bool TrainAndSaveModel()
-    {
-        try
-        {
-            var dataLoader = new DataLoader(_mlContext);
-            _dataMappings = dataLoader.LoadMappingsAndHistory(_mockPurchasesPath, _mockDetailsPath);
-            if (_dataMappings == null) throw new InvalidOperationException("Failed to load mappings for training.");
-
-            IDataView trainData = dataLoader.LoadData(_mockPurchasesPath, _mockDetailsPath, _dataMappings);
-            if (trainData == null || trainData.Preview().RowView.Length == 0) throw new InvalidOperationException("No data loaded for training.");
-
-            var modelTrainer = new ModelTrainer(_mlContext);
-            _trainedModel = modelTrainer.TrainModel(trainData);
-            _mlContext.Model.Save(_trainedModel, trainData.Schema, _modelPath);
-            return true;
+            _tenantDataMappings[tenantId] = tenantDataMappings;
+            return (predictionEngine, tenantDataMappings);
         }
-        catch (Exception)
+        finally
         {
-            _trainedModel = null;
-            return false;
+            tenantLock.Release();
         }
     }
 
     public async Task<IEnumerable<ProductDto>> GetRecommendationsAsync(Guid userId, Guid tenantId, int count)
     {
-        if (!EnsureModelLoaded() || _predictionEngine == null || _dataMappings == null)
+        var (predictionEngine, dataMappings) = await EnsureModelAndMappingsLoadedForTenantAsync(tenantId);
+
+        if (predictionEngine == null || dataMappings == null || !dataMappings.ProductGuidToIntMap.Any())
         {
             return Enumerable.Empty<ProductDto>();
         }
 
-        if (!_dataMappings.UserGuidToFloatMap.TryGetValue(userId, out float userFloatId)) { return Enumerable.Empty<ProductDto>(); }
-        HashSet<Guid> purchasedProductGuids = _dataMappings.UserPurchaseHistory.TryGetValue(userId, out var purchased) ? purchased : new HashSet<Guid>();
-        var allTenantProducts = await _productRepository.GetAllProductsByTenantIdAsync(tenantId);
-        if (!allTenantProducts.Any()) { return Enumerable.Empty<ProductDto>(); }
+        if (!dataMappings.UserGuidToFloatMap.TryGetValue(userId, out float userFloatId))
+        {
+            return Enumerable.Empty<ProductDto>();
+        }
+
+        HashSet<Guid> purchasedProductGuids = dataMappings.UserPurchaseHistory.TryGetValue(userId, out var purchased)
+            ? purchased
+            : new HashSet<Guid>();
+
+        var allTenantProductsFromDb = await _productRepository.GetAllProductsByTenantIdAsync(tenantId);
+        if (!allTenantProductsFromDb.Any())
+        {
+            return Enumerable.Empty<ProductDto>();
+        }
 
         var predictions = new List<(Guid ProductGuid, float Score)>();
-        foreach (var product in allTenantProducts)
+
+        foreach (var productEntity in allTenantProductsFromDb)
         {
-            if (purchasedProductGuids.Contains(product.Id)) continue;
-            if (!_dataMappings.ProductGuidToIntMap.TryGetValue(product.Id, out int productIntId)) continue;
-            if (!_dataMappings.ProductIntToCategoryIntMap.TryGetValue(productIntId, out int categoryIntId)) { categoryIntId = 0; }
+            if (purchasedProductGuids.Contains(productEntity.Id)) continue;
+            if (!dataMappings.ProductGuidToIntMap.TryGetValue(productEntity.Id, out int productIntId)) continue;
+
+            int categoryIntId = dataMappings.ProductIntToCategoryIntMap.TryGetValue(productIntId, out int catIntId) ? catIntId : 0;
 
             var predictionInput = new ProductRating { UserId = userFloatId, ProductId = productIntId, CategoryId = categoryIntId };
-            var prediction = _predictionEngine.Predict(predictionInput);
-            predictions.Add((product.Id, prediction.Score));
+            var predictionResult = predictionEngine.Predict(predictionInput);
+            predictions.Add((productEntity.Id, predictionResult.Score));
         }
-        var topProductGuids = predictions.OrderByDescending(p => p.Score).Take(count).Select(p => p.ProductGuid).ToList();
-        var recommendedProducts = topProductGuids
-                                .Select(guid => allTenantProducts.FirstOrDefault(p => p.Id == guid))
-                                .Where(p => p != null)
-                                .Select(p => MapProductToDto(p!))
-                                .ToList();
 
-        return recommendedProducts;
+        var topProductGuids = predictions
+            .OrderByDescending(p => p.Score)
+            .Take(count)
+            .Select(p => p.ProductGuid)
+            .ToList();
+
+        var recommendedProductDtos = topProductGuids
+            .Select(guid => allTenantProductsFromDb.FirstOrDefault(p => p.Id == guid))
+            .Where(p => p != null && p.IsAvailable)
+            .Select(p => MapProductToDto(p!))
+            .ToList();
+
+        return recommendedProductDtos;
     }
 
     private ProductDto MapProductToDto(Product product)
     {
-        if (product == null)
-        {
-            throw new ArgumentNullException(nameof(product), "Cannot map a null product.");
-        }
-
         return new ProductDto
         {
             Id = product.Id,
@@ -169,5 +230,64 @@ public class RecommendationService : IRecommendationService
             CategoryId = product.CategoryId,
             CategoryName = product.Category?.Name ?? "Desconocida"
         };
+    }
+
+    public async Task<bool> RetrainTenantModelAsync(Guid tenantId)
+    {
+        var tenantLock = GetTenantLock(tenantId);
+        await tenantLock.WaitAsync();
+
+        try
+        {
+            var modelPathForTenant = GetModelPathForTenant(tenantId);
+            var dataLoader = new DataLoader(_mlContext, _dbContext);
+            DataMappings? tenantDataMappings = await dataLoader.LoadMappingsAndHistoryForTenantAsync(tenantId);
+
+            if (tenantDataMappings == null || !tenantDataMappings.ProductGuidToIntMap.Any() || !tenantDataMappings.UserGuidToFloatMap.Any())
+            {
+                if (File.Exists(modelPathForTenant)) File.Delete(modelPathForTenant);
+                _tenantModels.TryRemove(tenantId, out _);
+                _tenantPredictionEngines.TryRemove(tenantId, out _);
+                _tenantDataMappings.TryRemove(tenantId, out _);
+                return false;
+            }
+
+            IDataView? trainData = dataLoader.LoadDataForTenant(tenantDataMappings);
+            if (trainData == null || trainData.GetColumn<float>(nameof(ProductRating.UserId)).Count() == 0)
+            {
+                if (File.Exists(modelPathForTenant)) File.Delete(modelPathForTenant);
+                _tenantModels.TryRemove(tenantId, out _);
+                _tenantPredictionEngines.TryRemove(tenantId, out _);
+                _tenantDataMappings[tenantId] = tenantDataMappings;
+                return false;
+            }
+
+            var modelTrainer = new ModelTrainer(_mlContext);
+            ITransformer? newTrainedModel;
+            try
+            {
+                newTrainedModel = modelTrainer.TrainModel(trainData);
+            }
+            catch { return false; }
+
+            if (newTrainedModel != null)
+            {
+                try
+                {
+                    _mlContext.Model.Save(newTrainedModel, trainData.Schema, modelPathForTenant);
+                    var newPredictionEngine = _mlContext.Model.CreatePredictionEngine<ProductRating, ProductRatingPrediction>(newTrainedModel);
+                    _tenantModels[tenantId] = newTrainedModel;
+                    _tenantPredictionEngines[tenantId] = newPredictionEngine;
+                    _tenantDataMappings[tenantId] = tenantDataMappings;
+                    return true;
+                }
+                catch { return false; }
+            }
+            return false;
+        }
+        finally
+        {
+            tenantLock.Release();
+        }
     }
 }
