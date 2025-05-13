@@ -15,6 +15,8 @@ public class Product
     public Guid CategoryId { get; set; }
     public virtual Category Category { get; set; } = null!;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
-    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow; 
-        
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public bool IsDeleted { get; set; } = false;
+    public DateTimeOffset? DeletedAt { get; set; } = null;
 }
