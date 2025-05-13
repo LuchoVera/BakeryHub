@@ -3,6 +3,7 @@ using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
 using BakeryHub.Domain.Interfaces;
 using BakeryHub.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
 namespace BakeryHub.Application.Services;
@@ -154,11 +155,16 @@ public class ProductService : IProductService
     {
         var product = await _productRepository.GetByIdAsync(productId);
 
-        if (product == null || product.TenantId != adminTenantId) return false;
+        var productToSoftDelete = await _context.Products.IgnoreQueryFilters()
+                                                        .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == adminTenantId);
 
-        if (product.IsAvailable) return false;
+        if (productToSoftDelete == null) return false;
 
-        await _productRepository.DeleteAsync(productId);
+        productToSoftDelete.IsDeleted = true;
+        productToSoftDelete.DeletedAt = DateTimeOffset.UtcNow;
+        productToSoftDelete.IsAvailable = false;
+
+        _productRepository.Update(productToSoftDelete);
         await _context.SaveChangesAsync();
         return true;
     }

@@ -3,6 +3,7 @@ using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
 using BakeryHub.Domain.Interfaces;
 using BakeryHub.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace BakeryHub.Application.Services;
 public class CategoryService : ICategoryService
@@ -32,17 +33,34 @@ public class CategoryService : ICategoryService
 
     public async Task<CategoryDto?> CreateCategoryForAdminAsync(CreateCategoryDto categoryDto, Guid adminTenantId)
     {
-        if (await _categoryRepository.NameExistsForTenantAsync(categoryDto.Name, adminTenantId))
+        var existingCategory = await _categoryRepository.GetByNameAndTenantIgnoreQueryFiltersAsync(categoryDto.Name, adminTenantId);
+
+        if (existingCategory != null)
         {
-            return null;
+            if (existingCategory.IsDeleted)
+            {
+                existingCategory.IsDeleted = false;
+                existingCategory.DeletedAt = null;
+
+                _context.Categories.Update(existingCategory);
+
+                await _context.SaveChangesAsync();
+                return MapCategoryToDto(existingCategory);
+            }
+            else
+            {
+                return null;
+            }
         }
 
         var category = new Category
         {
             Id = Guid.NewGuid(),
             Name = categoryDto.Name,
-            TenantId = adminTenantId
+            TenantId = adminTenantId,
+            IsDeleted = false,
         };
+
         await _categoryRepository.AddAsync(category);
         await _context.SaveChangesAsync();
         return MapCategoryToDto(category);
@@ -60,7 +78,7 @@ public class CategoryService : ICategoryService
                 return false;
             }
         }
-
+             
         category.Name = categoryDto.Name;
         _categoryRepository.Update(category);
         await _context.SaveChangesAsync();
@@ -73,12 +91,19 @@ public class CategoryService : ICategoryService
         {
             await _categoryRepository.DeleteAsync(categoryId, adminTenantId);
             await _context.SaveChangesAsync();
-            return true;
+
+            var checkCategory = await _context.Categories
+                                           .IgnoreQueryFilters()
+                                           .FirstOrDefaultAsync(c => c.Id == categoryId && c.TenantId == adminTenantId);
+            return checkCategory?.IsDeleted ?? false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
         }
         catch
         {
-            var exists = await _categoryRepository.ExistsAsync(categoryId, adminTenantId);
-            return !exists;
+            return false;
         }
     }
 }

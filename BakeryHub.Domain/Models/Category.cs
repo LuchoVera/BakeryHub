@@ -5,7 +5,10 @@ public class Category
     public required string Name { get; set; }
 
     public Guid TenantId { get; set; }
-    public virtual Tenant Tenant { get; set; } = null!;
 
+    public virtual Tenant Tenant { get; set; } = null!;
     public virtual ICollection<Product> Products { get; set; } = new List<Product>();
+    
+    public bool IsDeleted { get; set; } = false;
+    public DateTimeOffset? DeletedAt { get; set; }
 }

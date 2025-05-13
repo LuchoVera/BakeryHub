@@ -98,10 +98,14 @@ public class ProductRepository : IProductRepository
 
     public async Task DeleteAsync(Guid productId)
     {
-        var product = await _context.Products.FindAsync(productId);
+        var product = await _context.Products.IgnoreQueryFilters()
+                                .FirstOrDefaultAsync(p => p.Id == productId);
         if (product != null)
         {
-            _context.Products.Remove(product);
+            product.IsDeleted = true;
+            product.DeletedAt = DateTimeOffset.UtcNow;
+            product.IsAvailable = false;
+            _context.Products.Update(product);
         }
     }
 
