@@ -89,4 +89,15 @@ public class OrderRepository : IOrderRepository
         order.UpdatedAt = DateTimeOffset.UtcNow;
         _context.Orders.Update(order);
     }
+
+    public async Task<IEnumerable<Order>> GetOrdersWithItemsAndProductCategoriesAsync(Guid userId, Guid tenantId)
+    {
+        return await _context.Orders
+            .Where(o => o.ApplicationUserId == userId && o.TenantId == tenantId && o.OrderItems.Any())
+            .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Product)
+                    .ThenInclude(p => p!.Category)
+            .AsNoTracking()
+            .ToListAsync();
+    }
 }
