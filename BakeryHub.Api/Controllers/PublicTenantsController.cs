@@ -17,19 +17,23 @@ public class PublicTenantsController : ControllerBase
     private readonly IProductService _productService;
     private readonly IRecommendationService _recommendationService;
     private readonly IOrderService _orderService;
+    private readonly ICategoryService _categoryService;
+
 
     public PublicTenantsController(
         ITenantRepository tenantRepository,
         IProductService productService,
         IAccountService accountService,
         IRecommendationService recommendationService,
-        IOrderService orderService)
+        IOrderService orderService,
+        ICategoryService categoryService)
     {
         _tenantRepository = tenantRepository;
         _productService = productService;
         _accountService = accountService;
         _recommendationService = recommendationService;
         _orderService = orderService;
+        _categoryService = categoryService;
     }
 
     [HttpGet("{subdomain}")]
@@ -340,4 +344,26 @@ public class PublicTenantsController : ControllerBase
         return Ok(orderDto);
     }
 
+    [HttpGet("{subdomain}/categories/preferred")]
+    [Authorize(Roles = "Customer")]
+    [ProducesResponseType(typeof(IEnumerable<CategoryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<CategoryDto>>> GetPreferredCategories(string subdomain)
+    {
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null)
+        {
+            return NotFound($"Tenant '{subdomain}' not found.");
+        }
+
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdString, out Guid userId))
+        {
+            return Unauthorized("User ID could not be determined.");
+        }
+
+        var preferredCategories = await _categoryService.GetPreferredCategoriesForCustomerAsync(tenant.Id, userId);
+        return Ok(preferredCategories);
+    }
 }
