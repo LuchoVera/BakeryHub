@@ -10,4 +10,5 @@ public interface IOrderRepository
     Task<IEnumerable<Order>> GetOrdersByUserIdAndTenantAsync(Guid userId, Guid tenantId);
     Task<IEnumerable<Order>> GetOrdersByTenantIdAsync(Guid tenantId);
     void UpdateOrder(Order order);
+    Task<IEnumerable<Order>> GetOrdersWithItemsAndProductCategoriesAsync(Guid userId, Guid tenantId);
 }
