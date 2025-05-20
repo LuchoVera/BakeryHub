@@ -9,4 +9,5 @@ public interface ICategoryService
     Task<CategoryDto?> CreateCategoryForAdminAsync(CreateCategoryDto categoryDto, Guid adminTenantId);
     Task<bool> UpdateCategoryForAdminAsync(Guid categoryId, UpdateCategoryDto categoryDto, Guid adminTenantId);
     Task<bool> DeleteCategoryForAdminAsync(Guid categoryId, Guid adminTenantId);
+    Task<IEnumerable<CategoryDto>> GetPreferredCategoriesForCustomerAsync(Guid tenantId, Guid userId);
 }
