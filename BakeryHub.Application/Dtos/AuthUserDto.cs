@@ -9,4 +9,5 @@ public class AuthUserDto
     public Guid? AdministeredTenantId { get; set; }
     public string? AdministeredTenantSubdomain { get; set; }
     public List<Guid>? TenantMemberships { get; set; }
+    public string? PhoneNumber { get; set; }
 }

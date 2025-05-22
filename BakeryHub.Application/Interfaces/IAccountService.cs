@@ -2,6 +2,7 @@ using BakeryHub.Application.Dtos;
 using BakeryHub.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 namespace BakeryHub.Application.Interfaces;
+
 public interface IAccountService
 {
     Task<(IdentityResult Result, Guid? UserId)> RegisterAdminAsync(AdminRegisterDto dto);
@@ -13,5 +14,6 @@ public interface IAccountService
     Task<AuthUserDto> GetCurrentUserAsync(ApplicationUser user);
     Task<EmailCheckResultDto> CheckEmailAsync(string email);
     Task<LinkAccountResult> LinkExistingCustomerToTenantAsync(string email, Guid tenantId);
-
+    Task<IdentityResult> ChangePasswordAsync(Guid userId, ChangePasswordDto dto);
+    Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateUserProfileAsync(Guid userId, UpdateUserProfileDto dto);
 }
