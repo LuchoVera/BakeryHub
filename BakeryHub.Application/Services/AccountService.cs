@@ -309,7 +309,8 @@ public class AccountService : IAccountService
             Name = user.Name,
             Roles = roles,
             AdministeredTenantId = tenantId,
-            AdministeredTenantSubdomain = tenantSubdomain
+            AdministeredTenantSubdomain = tenantSubdomain,
+            PhoneNumber = user.PhoneNumber
         };
     }
     public async Task<AuthUserDto> GetCurrentUserAsync(ApplicationUser user)
@@ -344,7 +345,8 @@ public class AccountService : IAccountService
             Roles = roles,
             AdministeredTenantId = administeredTenantId,
             AdministeredTenantSubdomain = administeredTenantSubdomain,
-            TenantMemberships = tenantMemberships
+            TenantMemberships = tenantMemberships,
+            PhoneNumber = user.PhoneNumber
         };
     }
     public async Task<EmailCheckResultDto> CheckEmailAsync(string email)
@@ -366,29 +368,45 @@ public class AccountService : IAccountService
         var user = await _userManager.FindByEmailAsync(email);
         if (user == null)
         {
-            return new LinkAccountResult { Outcome = LinkAccountOutcome.UserNotFound, IdentityResult = IdentityResult
-            .Failed(new IdentityError { Code = "UserNotFound", Description = "Email address not found." }) };
+            return new LinkAccountResult
+            {
+                Outcome = LinkAccountOutcome.UserNotFound,
+                IdentityResult = IdentityResult
+            .Failed(new IdentityError { Code = "UserNotFound", Description = "Email address not found." })
+            };
         }
 
         var roles = await _userManager.GetRolesAsync(user);
 
         if (roles.Contains(AdminRole))
         {
-            return new LinkAccountResult { Outcome = LinkAccountOutcome.AdminConflict, IdentityResult = IdentityResult
-            .Failed(new IdentityError { Code = "AdminConflict", Description = "Administrators cannot be linked as customers." }) };
+            return new LinkAccountResult
+            {
+                Outcome = LinkAccountOutcome.AdminConflict,
+                IdentityResult = IdentityResult
+            .Failed(new IdentityError { Code = "AdminConflict", Description = "Administrators cannot be linked as customers." })
+            };
         }
 
         if (!roles.Contains(CustomerRole))
         {
-            return new LinkAccountResult { Outcome = LinkAccountOutcome.UserNotCustomer, IdentityResult = IdentityResult
-            .Failed(new IdentityError { Code = "UserNotCustomer", Description = "This account is not a customer account." }) };
+            return new LinkAccountResult
+            {
+                Outcome = LinkAccountOutcome.UserNotCustomer,
+                IdentityResult = IdentityResult
+            .Failed(new IdentityError { Code = "UserNotCustomer", Description = "This account is not a customer account." })
+            };
         }
 
         bool tenantExists = await _context.Tenants.AnyAsync(t => t.Id == tenantId);
         if (!tenantExists)
         {
-            return new LinkAccountResult { Outcome = LinkAccountOutcome.TenantNotFound, IdentityResult = IdentityResult
-            .Failed(new IdentityError { Code = "TenantNotFound", Description = "Bakery not found." }) };
+            return new LinkAccountResult
+            {
+                Outcome = LinkAccountOutcome.TenantNotFound,
+                IdentityResult = IdentityResult
+            .Failed(new IdentityError { Code = "TenantNotFound", Description = "Bakery not found." })
+            };
         }
 
         bool isAlreadyMember = await _context.CustomerTenantMemberships
@@ -396,8 +414,12 @@ public class AccountService : IAccountService
 
         if (isAlreadyMember)
         {
-            return new LinkAccountResult { Outcome = LinkAccountOutcome.AlreadyMember, IdentityResult = IdentityResult
-            .Failed(new IdentityError { Code = "AlreadyMember", Description = "Account is already linked to this bakery." }) };
+            return new LinkAccountResult
+            {
+                Outcome = LinkAccountOutcome.AlreadyMember,
+                IdentityResult = IdentityResult
+            .Failed(new IdentityError { Code = "AlreadyMember", Description = "Account is already linked to this bakery." })
+            };
         }
 
         var membership = new CustomerTenantMembership
@@ -417,13 +439,53 @@ public class AccountService : IAccountService
         }
         catch (DbUpdateException)
         {
-            return new LinkAccountResult { Outcome = LinkAccountOutcome.DbError, IdentityResult = IdentityResult
-            .Failed(new IdentityError { Code = "DbError", Description = "A database error occurred while linking the account." }) };
+            return new LinkAccountResult
+            {
+                Outcome = LinkAccountOutcome.DbError,
+                IdentityResult = IdentityResult
+            .Failed(new IdentityError { Code = "DbError", Description = "A database error occurred while linking the account." })
+            };
         }
         catch
         {
-            return new LinkAccountResult { Outcome = LinkAccountOutcome.Failed, IdentityResult = IdentityResult
-            .Failed(new IdentityError { Code = "UnknownError", Description = "An unexpected error occurred during linking." }) };
+            return new LinkAccountResult
+            {
+                Outcome = LinkAccountOutcome.Failed,
+                IdentityResult = IdentityResult
+            .Failed(new IdentityError { Code = "UnknownError", Description = "An unexpected error occurred during linking." })
+            };
         }
+    }
+
+    public async Task<IdentityResult> ChangePasswordAsync(Guid userId, ChangePasswordDto dto)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+        {
+            return IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "Usuario no encontrado." });
+        }
+        return await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
+    }
+
+    public async Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateUserProfileAsync(Guid userId, UpdateUserProfileDto dto)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+        {
+            return (IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "Usuario no encontrado." }), null);
+        }
+
+        user.Name = dto.Name;
+        user.PhoneNumber = string.IsNullOrWhiteSpace(dto.PhoneNumber) ? null : dto.PhoneNumber;
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            return (result, null);
+        }
+
+        var updatedAuthUser = await GetCurrentUserAsync(user);
+        return (result, updatedAuthUser);
     }
 }
