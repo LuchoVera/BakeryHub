@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
@@ -34,6 +35,15 @@ public class AccountsController : ControllerBase
         }
     }
 
+    private Guid GetCurrentUserId()
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (Guid.TryParse(userIdString, out Guid userId))
+        {
+            return userId;
+        }
+        throw new InvalidOperationException("User ID is not valid.");
+    }
     [HttpPost("register-admin")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -125,5 +135,53 @@ public class AccountsController : ControllerBase
         }
         var result = await _accountService.CheckEmailAsync(email);
         return Ok(result);
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto changePasswordDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var userId = GetCurrentUserId();
+        var result = await _accountService.ChangePasswordAsync(userId, changePasswordDto);
+
+        if (result.Succeeded)
+        {
+            return NoContent();
+        }
+
+        AddIdentityErrors(result);
+        return BadRequest(ModelState);
+    }
+
+    [HttpPut("me/update-profile")]
+    [Authorize]
+    [ProducesResponseType(typeof(AuthUserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateUserProfile([FromBody] UpdateUserProfileDto updateUserProfileDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var userId = GetCurrentUserId();
+        var (result, updatedUser) = await _accountService.UpdateUserProfileAsync(userId, updateUserProfileDto);
+
+        if (result.Succeeded && updatedUser != null)
+        {
+            return Ok(updatedUser);
+        }
+
+        AddIdentityErrors(result);
+        return BadRequest(ModelState);
     }
 }
