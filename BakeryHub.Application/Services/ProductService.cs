@@ -7,25 +7,36 @@ using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
 namespace BakeryHub.Application.Services;
+
 public class ProductService : IProductService
 {
     private readonly IProductRepository _productRepository;
     private readonly ICategoryRepository _categoryRepository;
     private readonly ApplicationDbContext _context;
+    private readonly ITagRepository _tagRepository;
 
     public ProductService(
         IProductRepository productRepository,
         ICategoryRepository categoryRepository,
-        ApplicationDbContext context)
+        ApplicationDbContext context,
+        ITagRepository tagRepository)
     {
         _productRepository = productRepository;
         _categoryRepository = categoryRepository;
         _context = context;
+        _tagRepository = tagRepository;
     }
 
-    public async Task<IEnumerable<ProductDto>> GetAllProductsForAdminAsync(Guid adminTenantId)
+    public async Task<IEnumerable<ProductDto>> GetAllProductsForAdminAsync(Guid adminTenantId, List<string>? tagNames = null)
     {
-        var products = await _productRepository.GetAllProductsByTenantIdAsync(adminTenantId);
+        var products = await _productRepository.GetAllProductsByTenantIdAsync(
+            adminTenantId,
+            searchTerm: null,
+            categoryId: null,
+            minPrice: null,
+            maxPrice: null,
+            tagNames: tagNames);
+
         var dtos = new List<ProductDto>();
         foreach (var p in products) { dtos.Add(await MapProductToDtoAsync(p)); }
         return dtos;
@@ -33,16 +44,27 @@ public class ProductService : IProductService
 
     public async Task<IEnumerable<ProductDto>> GetAvailableProductsByCategoryForAdminAsync(Guid categoryId, Guid adminTenantId)
     {
+        
         var products = await _productRepository.GetAvailableProductsByCategoryAndTenantGuidAsync(categoryId, adminTenantId);
         var dtos = new List<ProductDto>();
-        foreach (var p in products) { dtos.Add(await MapProductToDtoAsync(p)); }
+        foreach (var p in products)
+        {
+            dtos.Add(await MapProductToDtoAsync(p));
+        }
         return dtos;
     }
 
     public async Task<ProductDto?> GetProductByIdForAdminAsync(Guid productId, Guid adminTenantId)
     {
-        var product = await _productRepository.GetByIdAsync(productId);
-        if (product == null || product.TenantId != adminTenantId) return null;
+        
+        var product = await _context.Products
+                                .Include(p => p.Category)
+                                .Include(p => p.ProductTags)
+                                    .ThenInclude(pt => pt.Tag)
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == adminTenantId);
+
+        if (product == null) return null;
         return await MapProductToDtoAsync(product);
     }
 
@@ -63,8 +85,20 @@ public class ProductService : IProductService
             Images = productDto.Images ?? new List<string>(),
             LeadTime = productDto.LeadTimeInput,
             CategoryId = productDto.CategoryId,
-            TenantId = adminTenantId
+            TenantId = adminTenantId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
         };
+
+        if (productDto.Tags != null && productDto.Tags.Any())
+        {
+            product.ProductTags = new List<ProductTag>();
+            foreach (var tagName in productDto.Tags.Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var tag = await _tagRepository.GetOrCreateTagAsync(tagName, adminTenantId);
+                product.ProductTags.Add(new ProductTag { Product = product, Tag = tag });
+            }
+        }
 
         await _productRepository.AddAsync(product);
         await _context.SaveChangesAsync();
@@ -73,8 +107,12 @@ public class ProductService : IProductService
 
     public async Task<bool> UpdateProductForAdminAsync(Guid productId, UpdateProductDto productDto, Guid adminTenantId)
     {
-        var product = await _productRepository.GetByIdAsync(productId);
-        if (product == null || product.TenantId != adminTenantId) return false;
+        var product = await _context.Products
+                                .Include(p => p.ProductTags)
+                                    .ThenInclude(pt => pt.Tag)
+                                .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == adminTenantId);
+
+        if (product == null) return false;
 
         if (product.CategoryId != productDto.CategoryId &&
             !await _categoryRepository.ExistsAsync(productDto.CategoryId, adminTenantId))
@@ -90,7 +128,29 @@ public class ProductService : IProductService
         product.CategoryId = productDto.CategoryId;
         product.UpdatedAt = DateTimeOffset.UtcNow;
 
-        _productRepository.Update(product);
+        var newTagNames = productDto.Tags?.Where(t => !string.IsNullOrWhiteSpace(t)).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? new List<string>();
+
+        var productTagsToRemove = product.ProductTags
+            .Where(pt => !newTagNames.Contains(pt.Tag.Name, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        foreach (var ptToRemove in productTagsToRemove)
+        {
+            _context.ProductTags.Remove(ptToRemove);
+        }
+
+        var currentTagNamesInProduct = product.ProductTags
+            .Select(pt => pt.Tag.Name)
+            .ToList();
+
+        foreach (var tagName in newTagNames)
+        {
+            if (!currentTagNamesInProduct.Contains(tagName, StringComparer.OrdinalIgnoreCase))
+            {
+                var tagEntity = await _tagRepository.GetOrCreateTagAsync(tagName, adminTenantId);
+                product.ProductTags.Add(new ProductTag { Product = product, Tag = tagEntity });
+            }
+        }
+
         await _context.SaveChangesAsync();
         return true;
     }
@@ -111,8 +171,18 @@ public class ProductService : IProductService
     private async Task<ProductDto> MapProductToDtoAsync(Product product)
     {
         string categoryName = "Unknown";
-        var category = await _categoryRepository.GetByIdAndTenantAsync(product.CategoryId, product.TenantId);
-        if (category != null) categoryName = category.Name;
+        if (product.Category != null)
+        {
+            categoryName = product.Category.Name;
+        }
+        else
+        {
+            var category = await _categoryRepository.GetByIdAndTenantAsync(product.CategoryId, product.TenantId);
+            if (category != null) categoryName = category.Name;
+        }
+
+        var tagNames = product.ProductTags?.Select(pt => pt.Tag.Name).ToList() ?? new List<string>();
+
         return new ProductDto
         {
             Id = product.Id,
@@ -120,29 +190,30 @@ public class ProductService : IProductService
             Description = product.Description,
             Price = product.Price,
             IsAvailable = product.IsAvailable,
-            Images = product.Images,
+            Images = product.Images ?? new List<string>(),
             LeadTimeDisplay = product.LeadTime ?? "N/A",
             CategoryId = product.CategoryId,
-            CategoryName = categoryName
+            CategoryName = categoryName,
+            TagNames = tagNames
         };
     }
     public async Task<IEnumerable<ProductDto>> GetPublicProductsByTenantIdAsync(
-            Guid tenantId,
-            string? searchTerm = null,
-            Guid? categoryId = null,
-            decimal? minPrice = null,
-            decimal? maxPrice = null
-            )
+           Guid tenantId,
+           string? searchTerm = null,
+           Guid? categoryId = null,
+           decimal? minPrice = null,
+           decimal? maxPrice = null,
+           List<string>? tagNames = null)
     {
-        var allTenantProducts = await _productRepository.GetAllProductsByTenantIdAsync(
+        var products = await _productRepository.GetAllProductsByTenantIdAsync(
              tenantId,
              searchTerm,
              categoryId,
              minPrice,
-             maxPrice
-        );
+             maxPrice,
+             tagNames);
 
-        var availableProducts = allTenantProducts.Where(p => p.IsAvailable);
+        var availableProducts = products.Where(p => p.IsAvailable);
         var dtos = new List<ProductDto>();
         foreach (var product in availableProducts)
         {
@@ -153,46 +224,48 @@ public class ProductService : IProductService
 
     public async Task<bool> DeleteProductForAdminAsync(Guid productId, Guid adminTenantId)
     {
-        var product = await _productRepository.GetByIdAsync(productId);
-
         var productToSoftDelete = await _context.Products.IgnoreQueryFilters()
                                                         .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == adminTenantId);
 
         if (productToSoftDelete == null) return false;
+        if (productToSoftDelete.IsDeleted) return true;
 
         productToSoftDelete.IsDeleted = true;
         productToSoftDelete.DeletedAt = DateTimeOffset.UtcNow;
         productToSoftDelete.IsAvailable = false;
 
-        _productRepository.Update(productToSoftDelete);
+        _context.Entry(productToSoftDelete).State = EntityState.Modified;
         await _context.SaveChangesAsync();
         return true;
     }
 
     public async Task<ProductDto?> GetPublicProductByIdAsync(Guid productId, Guid tenantId)
     {
-        var product = await _productRepository.GetByIdAsync(productId);
+        
+        var product = await _context.Products
+                                .Include(p => p.Category)
+                                .Include(p => p.ProductTags)
+                                    .ThenInclude(pt => pt.Tag)
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(p => p.Id == productId && p.TenantId == tenantId && p.IsAvailable);
 
-        if (product == null || product.TenantId != tenantId || !product.IsAvailable)
-            return null;
-
+        if (product == null) return null;
         return await MapProductToDtoAsync(product);
     }
 
-    public async Task<IEnumerable<ProductDto>> SearchPublicProductsByNameAsync(
-        Guid tenantId,
-        string searchTerm,
-        Guid? categoryId = null,
-        decimal? minPrice = null,
-        decimal? maxPrice = null)
+    public async Task<IEnumerable<ProductDto>> SearchPublicProductsByNameOrTagsAsync(
+       Guid tenantId,
+       string? searchTerm = null,
+       List<string>? specificTagNames = null,
+       Guid? categoryId = null,
+       decimal? minPrice = null,
+       decimal? maxPrice = null)
     {
-        var searchedProducts = await _productRepository.SearchPublicProductsByNameAsync(
-            tenantId, searchTerm, categoryId, minPrice, maxPrice);
-
-        var availableProducts = searchedProducts.Where(p => p.IsAvailable);
+        var products = await _productRepository.SearchPublicProductsByNameOrTagsAsync(
+            tenantId, searchTerm, specificTagNames, categoryId, minPrice, maxPrice);
 
         var dtos = new List<ProductDto>();
-        foreach (var product in availableProducts)
+        foreach (var product in products) 
         {
             dtos.Add(await MapProductToDtoAsync(product));
         }

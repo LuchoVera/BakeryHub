@@ -3,6 +3,7 @@ using BakeryHub.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace BakeryHub.Infrastructure.Persistence.Repositories;
+
 public class ProductRepository : IProductRepository
 {
     private readonly ApplicationDbContext _context;
@@ -39,11 +40,14 @@ public class ProductRepository : IProductRepository
         string? searchTerm = null,
         Guid? categoryId = null,
         decimal? minPrice = null,
-        decimal? maxPrice = null
-        )
+        decimal? maxPrice = null,
+        List<string>? tagNames = null)
     {
         var query = _context.Products
                         .Where(p => p.TenantId == tenantId)
+                        .Include(p => p.Category)
+                        .Include(p => p.ProductTags)
+                            .ThenInclude(pt => pt.Tag)
                         .AsNoTracking();
 
         if (categoryId.HasValue && categoryId.Value != Guid.Empty)
@@ -60,6 +64,12 @@ public class ProductRepository : IProductRepository
             );
         }
 
+        if (tagNames != null && tagNames.Any())
+        {
+            var lowerTagNames = tagNames.Select(tn => tn.ToLowerInvariant()).ToList();
+            query = query.Where(p => p.ProductTags.Any(pt => lowerTagNames.Contains(pt.Tag.Name.ToLower())));
+        }
+
         if (minPrice.HasValue)
         {
             query = query.Where(p => p.Price >= minPrice.Value);
@@ -68,9 +78,7 @@ public class ProductRepository : IProductRepository
         {
             query = query.Where(p => p.Price <= maxPrice.Value);
         }
-        return await query
-                     .Include(p => p.Category)
-                     .ToListAsync();
+        return await query.ToListAsync();
     }
 
     public async Task<IEnumerable<Product>> GetAvailableProductsByCategoryAndTenantGuidAsync(Guid categoryId, Guid tenantId)
@@ -109,25 +117,38 @@ public class ProductRepository : IProductRepository
         }
     }
 
-    public async Task<IEnumerable<Product>> SearchPublicProductsByNameAsync(
-        Guid tenantId,
-        string searchTerm,
-        Guid? categoryId = null,
-        decimal? minPrice = null,
-        decimal? maxPrice = null)
+    public async Task<IEnumerable<Product>> SearchPublicProductsByNameOrTagsAsync(
+       Guid tenantId,
+       string? searchTerm = null,
+       List<string>? tagNames = null,
+       Guid? categoryId = null,
+       decimal? minPrice = null,
+       decimal? maxPrice = null)
     {
-        var searchTermLower = searchTerm.ToLowerInvariant().Trim();
+        var query = _context.Products
+            .Where(p => p.TenantId == tenantId && p.IsAvailable)
+            .Include(p => p.Category)
+            .Include(p => p.ProductTags)
+                .ThenInclude(pt => pt.Tag)
+            .AsNoTracking();
 
-        IQueryable<Product> query = _context.Products
-                                       .Where(p => p.TenantId == tenantId && !string.IsNullOrEmpty(p.Name))
-                                       .AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(searchTermLower))
+        if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            query = query.Where(p => p.Name.ToLower().Contains(searchTermLower));
+            var searchTermLower = searchTerm.ToLowerInvariant().Trim();
+            query = query.Where(p =>
+                (p.Name != null && EF.Functions.ILike(p.Name, $"%{searchTermLower}%")) ||
+                (p.Description != null && EF.Functions.ILike(p.Description, $"%{searchTermLower}%")) ||
+                p.ProductTags.Any(pt => EF.Functions.ILike(pt.Tag.Name, $"%{searchTermLower}%"))
+            );
         }
-        else
+
+        if (tagNames != null && tagNames.Any())
         {
-            return Enumerable.Empty<Product>();
+            var lowerTagNames = tagNames.Select(tn => tn.ToLowerInvariant()).ToList();
+            foreach (var tagName in lowerTagNames)
+            {
+                query = query.Where(p => p.ProductTags.Any(pt => EF.Functions.ILike(pt.Tag.Name, tagName)));
+            }
         }
 
         if (categoryId.HasValue && categoryId.Value != Guid.Empty)
@@ -145,8 +166,6 @@ public class ProductRepository : IProductRepository
             query = query.Where(p => p.Price <= maxPrice.Value);
         }
 
-        return await query
-                      .Include(p => p.Category)
-                      .ToListAsync();
+        return await query.ToListAsync();
     }
 }
