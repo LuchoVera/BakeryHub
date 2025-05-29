@@ -102,6 +102,7 @@ builder.Services.AddScoped<ITenantRepository, TenantRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<ITagRepository, TagRepository>();
 
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IProductService, ProductService>();
@@ -112,18 +113,19 @@ builder.Services.AddSingleton<MLContext>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
 builder.Services.AddScoped<IModelRetrainingService, ModelRetrainingService>();
 builder.Services.AddHostedService<ScheduledRecommendationRetrainingService>();
+builder.Services.AddScoped<ITagService, TagService>();
 
 
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    /*using (var scope = app.Services.CreateScope())
+    using (var scope = app.Services.CreateScope())
     {
         var services = scope.ServiceProvider;
         await DbInitializer.InitializeAsync(services);
        
-    }*/
+    }
     app.UseDeveloperExceptionPage();
     app.UseSwagger();
     app.UseSwaggerUI(c =>

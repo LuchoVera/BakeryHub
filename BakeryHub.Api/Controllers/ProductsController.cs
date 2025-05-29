@@ -16,7 +16,6 @@ public class ProductsController : AdminControllerBase
     private readonly IProductService _productService;
     private readonly ITenantRepository _tenantRepository;
 
-
     public ProductsController(IProductService productService, ITenantRepository tenantRepository, UserManager<ApplicationUser> userManager)
         : base(userManager)
     {
@@ -28,17 +27,16 @@ public class ProductsController : AdminControllerBase
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<IEnumerable<ProductDto>>> GetAllProductsForAdmin()
+    public async Task<ActionResult<IEnumerable<ProductDto>>> GetAllProductsForAdmin([FromQuery] List<string>? tags)
     {
         var adminTenantId = await GetCurrentAdminTenantIdAsync();
         if (adminTenantId == null) return Forbid("Admin not associated with a tenant.");
 
-        var productDtos = await _productService.GetAllProductsForAdminAsync(adminTenantId.Value);
+        var productDtos = await _productService.GetAllProductsForAdminAsync(adminTenantId.Value, tags);
         return Ok(productDtos);
     }
 
     [HttpGet("category/{categoryId:guid}")]
-    [Authorize(Roles = "Admin, Customer")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(IEnumerable<ProductDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -51,7 +49,6 @@ public class ProductsController : AdminControllerBase
         var productDtos = await _productService.GetAvailableProductsByCategoryForAdminAsync(categoryId, adminTenantId.Value);
         return Ok(productDtos);
     }
-
 
     [HttpGet("{id:guid}", Name = "GetProductById")]
     [Authorize(Roles = "Admin")]
@@ -75,11 +72,13 @@ public class ProductsController : AdminControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ProductDto>> CreateProduct([FromBody] CreateProductDto productDto)
     {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
         var adminTenantId = await GetCurrentAdminTenantIdAsync();
         if (adminTenantId == null) return Forbid("Admin not associated with a tenant.");
 
         var createdProductDto = await _productService.CreateProductForAdminAsync(productDto, adminTenantId.Value);
-        if (createdProductDto == null) return BadRequest("Failed to create product (e.g., invalid CategoryId).");
+        if (createdProductDto == null) return BadRequest("Failed to create product (e.g., invalid CategoryId or tag issue).");
 
         return CreatedAtAction(nameof(GetProductById), new { id = createdProductDto.Id }, createdProductDto);
     }
@@ -92,6 +91,8 @@ public class ProductsController : AdminControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateProduct(Guid id, [FromBody] UpdateProductDto productDto)
     {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
         var adminTenantId = await GetCurrentAdminTenantIdAsync();
         if (adminTenantId == null) return Forbid("Admin not associated with a tenant.");
 
@@ -140,13 +141,10 @@ public class ProductsController : AdminControllerBase
     public async Task<ActionResult<ProductDto>> GetPublicProductDetails(string subdomain, Guid productId)
     {
         var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
-
         if (tenant == null) return NotFound($"Bakery '{subdomain}' not found.");
 
         var productDto = await _productService.GetPublicProductByIdAsync(productId, tenant.Id);
-
-        if (productDto == null) return NotFound($"Product details not found or not available.");
-
+        if (productDto == null) return NotFound("Product details not found or not available.");
 
         return Ok(productDto);
     }
