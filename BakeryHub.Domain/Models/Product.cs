@@ -1,5 +1,4 @@
 namespace BakeryHub.Domain.Entities;
-
 public class Product
 {
     public Guid Id { get; set; }
@@ -19,4 +18,5 @@ public class Product
 
     public bool IsDeleted { get; set; } = false;
     public DateTimeOffset? DeletedAt { get; set; } = null;
+    public virtual ICollection<ProductTag> ProductTags { get; set; } = new List<ProductTag>();
 }

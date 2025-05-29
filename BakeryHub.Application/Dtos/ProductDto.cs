@@ -11,4 +11,5 @@ public class ProductDto
     public string LeadTimeDisplay { get; set; } = string.Empty;
     public Guid CategoryId { get; set; }
     public string CategoryName { get; set; } = string.Empty;
+    public List<string> TagNames { get; set; } = new List<string>();
 }
