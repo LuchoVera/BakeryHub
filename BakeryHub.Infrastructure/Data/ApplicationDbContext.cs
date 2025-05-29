@@ -15,6 +15,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<CustomerTenantMembership> CustomerTenantMemberships { get; set; }
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderItem> OrderItems { get; set; }
+    public DbSet<Tag> Tags { get; set; }
+    public DbSet<ProductTag> ProductTags { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -28,6 +30,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
         ConfigureProduct(builder);
         ConfigureOrder(builder);
         ConfigureOrderItem(builder);
+        ConfigureTag(builder);
+        ConfigureProductTag(builder);
 
         builder.Entity<Product>().HasQueryFilter(p => !p.IsDeleted);
         builder.Entity<Category>().HasQueryFilter(c => !c.IsDeleted);
@@ -102,7 +106,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             entity.HasOne(c => c.Tenant)
                   .WithMany(t => t.Categories)
                   .HasForeignKey(c => c.TenantId);
-            
             entity.Property(c => c.IsDeleted).HasDefaultValue(false);
             entity.HasIndex(c => c.IsDeleted);
         });
@@ -166,6 +169,38 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
                   .WithMany()
                   .HasForeignKey(oi => oi.ProductId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+    private static void ConfigureTag(ModelBuilder builder)
+    {
+        builder.Entity<Tag>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+            entity.Property(t => t.Name).IsRequired().HasMaxLength(50);
+            entity.HasIndex(t => new { t.TenantId, t.Name }).IsUnique();
+
+            entity.HasOne(t => t.Tenant)
+                  .WithMany()
+                  .HasForeignKey(t => t.TenantId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureProductTag(ModelBuilder builder)
+    {
+        builder.Entity<ProductTag>(entity =>
+        {
+            entity.HasKey(pt => new { pt.ProductId, pt.TagId });
+
+            entity.HasOne(pt => pt.Product)
+                  .WithMany(p => p.ProductTags)
+                  .HasForeignKey(pt => pt.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(pt => pt.Tag)
+                  .WithMany(t => t.ProductTags)
+                  .HasForeignKey(pt => pt.TagId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
