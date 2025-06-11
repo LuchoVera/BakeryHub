@@ -29,7 +29,7 @@ public class CategoryRepository : ICategoryRepository
 
             bool hasActiveAssociatedProducts = await _context.Products
                                                       .AnyAsync(p => p.CategoryId == categoryId && p.TenantId == tenantId && !p.IsDeleted);
-            
+
             if (hasActiveAssociatedProducts)
             {
                 throw new InvalidOperationException();

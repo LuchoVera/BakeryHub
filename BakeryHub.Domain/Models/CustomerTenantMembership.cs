@@ -1,7 +1,7 @@
 namespace BakeryHub.Domain.Entities;
 public class CustomerTenantMembership
 {
-    public Guid ApplicationUserId { get; set; } 
+    public Guid ApplicationUserId { get; set; }
     public Guid TenantId { get; set; }
     public DateTimeOffset DateJoined { get; set; } = DateTimeOffset.UtcNow;
     public bool IsActive { get; set; } = true;

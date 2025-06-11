@@ -1,44 +1,44 @@
 
 
-using BakeryHub.Application.Dtos.Dashboard; 
-using BakeryHub.Application.Interfaces;     
-using BakeryHub.Domain.Entities;          
+using BakeryHub.Application.Dtos.Dashboard;
+using BakeryHub.Application.Interfaces;
+using BakeryHub.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;      
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BakeryHub.Api.Controllers;
 
 [ApiController]
 [Route("api/admin/dashboard")]
-[Authorize(Roles = "Admin")] 
-public class AdminDashboardController : AdminControllerBase 
+[Authorize(Roles = "Admin")]
+public class AdminDashboardController : AdminControllerBase
 {
     private readonly IOrderService _orderService;
 
     public AdminDashboardController(
         IOrderService orderService,
-        UserManager<ApplicationUser> userManager) 
+        UserManager<ApplicationUser> userManager)
         : base(userManager)
     {
         _orderService = orderService;
     }
 
-    [HttpGet("order-statistics")] 
+    [HttpGet("order-statistics")]
     [ProducesResponseType(typeof(DashboardResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<DashboardResponseDto>> GetOrderDashboardStatistics(
-        [FromQuery] DashboardQueryParametersDto queryParams) 
+        [FromQuery] DashboardQueryParametersDto queryParams)
     {
-        var tenantId = await GetCurrentAdminTenantIdAsync(); 
+        var tenantId = await GetCurrentAdminTenantIdAsync();
         if (!tenantId.HasValue)
         {
             return Forbid("Admin not associated with a tenant.");
         }
 
-        
+
         if (queryParams.TimePeriod?.ToLowerInvariant() == "customrange")
         {
             if (!queryParams.CustomStartDate.HasValue)
@@ -56,21 +56,21 @@ public class AdminDashboardController : AdminControllerBase
 
         try
         {
-            
+
             var dashboardData = await _orderService.GetDashboardStatisticsAsync(tenantId.Value, queryParams);
 
-            if (dashboardData == null) 
+            if (dashboardData == null)
             {
-                 return NotFound(new { message = "Could not retrieve order statistics."});
+                return NotFound(new { message = "Could not retrieve order statistics." });
             }
 
             return Ok(dashboardData);
         }
-        catch (ArgumentException ex) 
+        catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch 
+        catch
         {
             return StatusCode(StatusCodes.Status500InternalServerError, "An unexpected error occurred while fetching order dashboard data.");
         }

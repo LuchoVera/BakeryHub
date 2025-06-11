@@ -124,7 +124,7 @@ if (app.Environment.IsDevelopment())
     {
         var services = scope.ServiceProvider;
         await DbInitializer.InitializeAsync(services);
-       
+
     }
     app.UseDeveloperExceptionPage();
     app.UseSwagger();
