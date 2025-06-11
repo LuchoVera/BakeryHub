@@ -44,7 +44,7 @@ public class ProductService : IProductService
 
     public async Task<IEnumerable<ProductDto>> GetAvailableProductsByCategoryForAdminAsync(Guid categoryId, Guid adminTenantId)
     {
-        
+
         var products = await _productRepository.GetAvailableProductsByCategoryAndTenantGuidAsync(categoryId, adminTenantId);
         var dtos = new List<ProductDto>();
         foreach (var p in products)
@@ -56,7 +56,7 @@ public class ProductService : IProductService
 
     public async Task<ProductDto?> GetProductByIdForAdminAsync(Guid productId, Guid adminTenantId)
     {
-        
+
         var product = await _context.Products
                                 .Include(p => p.Category)
                                 .Include(p => p.ProductTags)
@@ -241,7 +241,7 @@ public class ProductService : IProductService
 
     public async Task<ProductDto?> GetPublicProductByIdAsync(Guid productId, Guid tenantId)
     {
-        
+
         var product = await _context.Products
                                 .Include(p => p.Category)
                                 .Include(p => p.ProductTags)
@@ -265,7 +265,7 @@ public class ProductService : IProductService
             tenantId, searchTerm, specificTagNames, categoryId, minPrice, maxPrice);
 
         var dtos = new List<ProductDto>();
-        foreach (var product in products) 
+        foreach (var product in products)
         {
             dtos.Add(await MapProductToDtoAsync(product));
         }
