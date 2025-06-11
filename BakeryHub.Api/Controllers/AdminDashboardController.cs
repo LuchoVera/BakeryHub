@@ -1,5 +1,3 @@
-
-
 using BakeryHub.Application.Dtos.Dashboard;
 using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
@@ -37,7 +35,6 @@ public class AdminDashboardController : AdminControllerBase
         {
             return Forbid("Admin not associated with a tenant.");
         }
-
 
         if (queryParams.TimePeriod?.ToLowerInvariant() == "customrange")
         {
