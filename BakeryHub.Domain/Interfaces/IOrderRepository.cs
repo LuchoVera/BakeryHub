@@ -25,7 +25,8 @@ public interface IOrderRepository
     Task<List<OrderAggregationByEntity>> GetOrdersAggregatedByProductAsync(
         Guid tenantId, DateTimeOffset startDate,
         DateTimeOffset endDate,
-        IQueryable<Order> preFilteredOrdersQuery);
+        IQueryable<Order> preFilteredOrdersQuery,
+        bool includeProductsWithNoSales);
     Task<List<OrderAggregationByStatus>> GetOrdersAggregatedByStatusAsync(
         Guid tenantId, DateTimeOffset startDate,
         DateTimeOffset endDate,
