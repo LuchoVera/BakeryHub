@@ -33,10 +33,10 @@ public class OrderRepository : IOrderRepository
             foreach (var item in order.OrderItems)
             {
                 await _context.Entry(item)
-                              .Reference(i => i.Product)
-                              .Query()
-                              .IgnoreQueryFilters()
-                              .LoadAsync();
+                    .Reference(i => i.Product)
+                    .Query()
+                    .IgnoreQueryFilters()
+                    .LoadAsync();
             }
         }
         return order;
@@ -54,10 +54,10 @@ public class OrderRepository : IOrderRepository
             foreach (var item in order.OrderItems)
             {
                 await _context.Entry(item)
-                              .Reference(i => i.Product)
-                              .Query()
-                              .IgnoreQueryFilters()
-                              .LoadAsync();
+                    .Reference(i => i.Product)
+                    .Query()
+                    .IgnoreQueryFilters()
+                    .LoadAsync();
             }
         }
         return order;
@@ -117,6 +117,13 @@ public class OrderRepository : IOrderRepository
 
         switch (filterDimension.ToLowerInvariant())
         {
+            case "dayofweek":
+                if (int.TryParse(filterValue, out int dayOfWeekValue) && dayOfWeekValue >= 0 && dayOfWeekValue <= 6)
+                {
+                    DayOfWeek dayOfWeek = (DayOfWeek)dayOfWeekValue;
+                    query = query.Where(o => o.OrderDate.DayOfWeek == dayOfWeek);
+                }
+                break;
             case "category":
                 if (Guid.TryParse(filterValue, out Guid categoryId))
                 {
@@ -164,69 +171,157 @@ public class OrderRepository : IOrderRepository
     public async Task<List<OrderAggregationByTime>> GetOrdersAggregatedByTimeDimensionAsync(
         Guid tenantId, DateTimeOffset startDate, DateTimeOffset endDate, string timeDimension, IQueryable<Order> preFilteredOrdersQuery)
     {
-        return timeDimension.ToLowerInvariant() switch
+        var filteredOrders = await preFilteredOrdersQuery
+            .Select(o => new { o.OrderDate, o.TotalAmount })
+            .ToListAsync();
+
+        switch (timeDimension.ToLowerInvariant())
         {
-            "day" => await preFilteredOrdersQuery.GroupBy(o => o.OrderDate.Date)
-                .Select(g => new OrderAggregationByTime(g.Key.ToString("yyyy-MM-dd"), g.Sum(o => o.TotalAmount), g.Count()))
-                .OrderBy(r => r.PeriodLabel).ToListAsync(),
-            "month" => await preFilteredOrdersQuery.GroupBy(o => new { o.OrderDate.Year, o.OrderDate.Month })
-                .Select(g => new OrderAggregationByTime($"{g.Key.Year}-{g.Key.Month:D2}", g.Sum(o => o.TotalAmount), g.Count()))
-                .OrderBy(r => r.PeriodLabel).ToListAsync(),
-            "year" => await preFilteredOrdersQuery.GroupBy(o => o.OrderDate.Year)
-                .Select(g => new OrderAggregationByTime(g.Key.ToString(), g.Sum(o => o.TotalAmount), g.Count()))
-                .OrderBy(r => r.PeriodLabel).ToListAsync(),
-            _ => new List<OrderAggregationByTime>(),
-        };
+            case "day":
+                return filteredOrders
+                    .GroupBy(o => o.OrderDate.Date)
+                    .Select(g => new OrderAggregationByTime(g.Key.ToString("yyyy-MM-dd"), g.Sum(o => o.TotalAmount), g.Count()))
+                    .OrderBy(r => r.PeriodLabel)
+                    .ToList();
+            case "month":
+                return filteredOrders
+                    .GroupBy(o => new { o.OrderDate.Year, o.OrderDate.Month })
+                    .Select(g => new OrderAggregationByTime($"{g.Key.Year}-{g.Key.Month:D2}", g.Sum(o => o.TotalAmount), g.Count()))
+                    .OrderBy(r => r.PeriodLabel)
+                    .ToList();
+            case "year":
+                return filteredOrders
+                    .GroupBy(o => o.OrderDate.Year)
+                    .Select(g => new OrderAggregationByTime(g.Key.ToString(), g.Sum(o => o.TotalAmount), g.Count()))
+                    .OrderBy(r => r.PeriodLabel)
+                    .ToList();
+            case "dayofweek":
+                return Enum.GetValues(typeof(DayOfWeek))
+                    .Cast<DayOfWeek>()
+                    .Select(day =>
+                    {
+                        var salesOnDay = filteredOrders.Where(o => o.OrderDate.DayOfWeek == day);
+                        return new OrderAggregationByTime(
+                            day.ToString(),
+                            salesOnDay.Sum(o => o.TotalAmount),
+                            salesOnDay.Count()
+                        );
+                    })
+                    .ToList();
+            default:
+                return new List<OrderAggregationByTime>();
+        }
     }
 
     public async Task<List<OrderAggregationByEntity>> GetOrdersAggregatedByCategoryAsync(
-         Guid tenantId, DateTimeOffset startDate, DateTimeOffset endDate, IQueryable<Order> preFilteredOrdersQuery)
-    {
-        var ordersInPeriod = await preFilteredOrdersQuery.Select(o => o.Id).ToListAsync();
-        if (!ordersInPeriod.Any()) return new List<OrderAggregationByEntity>();
-
-        return await _context.OrderItems
-            .AsNoTracking()
-            .Where(oi => ordersInPeriod.Contains(oi.OrderId))
-            .Include(oi => oi.Product).ThenInclude(p => p!.Category)
-            .Where(oi => oi.Product != null && oi.Product.Category != null)
-            .GroupBy(oi => new { oi.Product!.CategoryId, Name = oi.Product.Category!.Name })
-            .Select(g => new OrderAggregationByEntity(
-                g.Key.CategoryId,
-                g.Key.Name ?? "Sin Categoría",
-                g.Sum(oi => oi.Quantity * oi.UnitPrice),
-                g.Select(oi => oi.OrderId).Distinct().Count()
-            ))
-            .OrderByDescending(r => r.TotalAmount)
-            .ToListAsync();
-    }
-
-    public async Task<List<OrderAggregationByEntity>> GetOrdersAggregatedByProductAsync(
         Guid tenantId, DateTimeOffset startDate, DateTimeOffset endDate, IQueryable<Order> preFilteredOrdersQuery)
     {
         var ordersInPeriod = await preFilteredOrdersQuery.Select(o => o.Id).ToListAsync();
         if (!ordersInPeriod.Any()) return new List<OrderAggregationByEntity>();
 
-        return await _context.OrderItems
+        var itemsData = await _context.OrderItems
             .AsNoTracking()
             .Where(oi => ordersInPeriod.Contains(oi.OrderId))
-            .Include(oi => oi.Product)
-            .Where(oi => oi.Product != null)
-            .GroupBy(oi => new { oi.Product!.Id, Name = oi.Product.Name })
+            .Select(oi => new
+            {
+                oi.OrderId,
+                CategoryExists = oi.Product != null && oi.Product.Category != null,
+                CategoryId = oi.Product != null ? oi.Product.CategoryId : Guid.Empty,
+                CategoryName = oi.Product != null && oi.Product.Category != null ? oi.Product.Category.Name : "Sin Categoría",
+                Subtotal = oi.Quantity * oi.UnitPrice
+            })
+            .ToListAsync();
+
+        return itemsData
+            .Where(d => d.CategoryExists)
+            .GroupBy(d => new { d.CategoryId, Name = d.CategoryName })
             .Select(g => new OrderAggregationByEntity(
-                g.Key.Id,
-                g.Key.Name ?? "Sin Producto",
-                g.Sum(oi => oi.Quantity * oi.UnitPrice),
-                g.Select(oi => oi.OrderId).Distinct().Count()
+                g.Key.CategoryId,
+                g.Key.Name,
+                g.Sum(d => d.Subtotal),
+                g.Select(d => d.OrderId).Distinct().Count()
             ))
             .OrderByDescending(r => r.TotalAmount)
-            .ToListAsync();
+            .ToList();
+    }
+
+    public async Task<List<OrderAggregationByEntity>> GetOrdersAggregatedByProductAsync(
+        Guid tenantId, DateTimeOffset startDate, DateTimeOffset endDate, IQueryable<Order> preFilteredOrdersQuery, bool includeProductsWithNoSales)
+    {
+        var ordersInPeriod = await preFilteredOrdersQuery.Select(o => o.Id).ToListAsync();
+
+        if (!includeProductsWithNoSales)
+        {
+            if (!ordersInPeriod.Any()) return new List<OrderAggregationByEntity>();
+
+            var itemsData = await _context.OrderItems
+                .AsNoTracking()
+                .Where(oi => ordersInPeriod.Contains(oi.OrderId) && oi.Product != null)
+                .Select(oi => new
+                {
+                    oi.ProductId,
+                    ProductName = oi.Product!.Name,
+                    Subtotal = oi.Quantity * oi.UnitPrice,
+                    oi.OrderId
+                })
+                .ToListAsync();
+
+            return itemsData
+                .GroupBy(d => new { d.ProductId, d.ProductName })
+                .Select(g => new OrderAggregationByEntity(
+                    g.Key.ProductId,
+                    g.Key.ProductName,
+                    g.Sum(d => d.Subtotal),
+                    g.Select(d => d.OrderId).Distinct().Count()
+                ))
+                .OrderByDescending(r => r.TotalAmount)
+                .ToList();
+        }
+        else
+        {
+            var salesData = new Dictionary<Guid, (decimal TotalAmount, int OrderCount)>();
+            if (ordersInPeriod.Any())
+            {
+                var soldProductsData = await _context.OrderItems
+                    .AsNoTracking()
+                    .Where(oi => ordersInPeriod.Contains(oi.OrderId))
+                    .GroupBy(oi => oi.ProductId)
+                    .Select(g => new
+                    {
+                        ProductId = g.Key,
+                        TotalAmount = g.Sum(oi => oi.Quantity * oi.UnitPrice),
+                        OrderCount = g.Select(oi => oi.OrderId).Distinct().Count()
+                    })
+                    .ToListAsync();
+
+                salesData = soldProductsData.ToDictionary(d => d.ProductId, d => (d.TotalAmount, d.OrderCount));
+            }
+
+            var allProducts = await _context.Products
+                .AsNoTracking()
+                .Where(p => p.TenantId == tenantId)
+                .ToListAsync();
+
+            return allProducts
+                .Select(p => new OrderAggregationByEntity(
+                    p.Id,
+                    p.Name,
+                    salesData.GetValueOrDefault(p.Id, (TotalAmount: 0m, OrderCount: 0)).TotalAmount,
+                    salesData.GetValueOrDefault(p.Id, (TotalAmount: 0m, OrderCount: 0)).OrderCount
+                ))
+                .OrderByDescending(r => r.TotalAmount)
+                .ToList();
+        }
     }
 
     public async Task<List<OrderAggregationByStatus>> GetOrdersAggregatedByStatusAsync(
         Guid tenantId, DateTimeOffset startDate, DateTimeOffset endDate, IQueryable<Order> preFilteredOrdersQuery)
     {
-        return await preFilteredOrdersQuery
+        var filteredOrders = await preFilteredOrdersQuery
+            .Select(o => new { o.Status, o.TotalAmount })
+            .ToListAsync();
+
+        return filteredOrders
             .GroupBy(o => o.Status)
             .Select(g => new OrderAggregationByStatus(
                 g.Key,
@@ -234,23 +329,32 @@ public class OrderRepository : IOrderRepository
                 g.Count()
             ))
             .OrderBy(r => r.Status)
-            .ToListAsync();
+            .ToList();
     }
 
     public async Task<List<OrderAggregationByEntity>> GetOrdersAggregatedByCustomerAsync(
         Guid tenantId, DateTimeOffset startDate, DateTimeOffset endDate, IQueryable<Order> preFilteredOrdersQuery)
     {
-        return await preFilteredOrdersQuery
-            .Include(o => o.User)
-            .Where(o => o.User != null && o.ApplicationUserId.HasValue)
-            .GroupBy(o => new { CustomerId = o.ApplicationUserId!.Value, CustomerName = o.User!.Name })
+        var ordersData = await preFilteredOrdersQuery
+            .Select(o => new
+            {
+                CustomerExists = o.User != null,
+                CustomerId = o.ApplicationUserId,
+                CustomerName = o.User != null ? o.User.Name : "Unknown Customer",
+                o.TotalAmount
+            })
+            .ToListAsync();
+
+        return ordersData
+            .Where(d => d.CustomerExists && d.CustomerId.HasValue)
+            .GroupBy(d => new { CustomerId = d.CustomerId!.Value, Name = d.CustomerName })
             .Select(g => new OrderAggregationByEntity(
                 g.Key.CustomerId,
-                g.Key.CustomerName ?? "Cliente Desconocido",
-                g.Sum(o => o.TotalAmount),
+                g.Key.Name,
+                g.Sum(d => d.TotalAmount),
                 g.Count()
             ))
             .OrderByDescending(r => r.TotalAmount)
-            .ToListAsync();
+            .ToList();
     }
 }
