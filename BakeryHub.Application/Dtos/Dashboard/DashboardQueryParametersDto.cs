@@ -1,3 +1,5 @@
+namespace BakeryHub.Application.Dtos.Dashboard;
+
 public class DashboardQueryParametersDto
 {
     public string TimePeriod { get; set; } = "last7days";
@@ -8,4 +10,5 @@ public class DashboardQueryParametersDto
     public string? FilterDimension { get; set; }
     public string? FilterValue { get; set; }
     public string? BreakdownDimension { get; set; }
+    public bool IncludeProductsWithNoSales { get; set; } = false;
 }

@@ -1,4 +1,5 @@
 namespace BakeryHub.Application.Dtos.Dashboard;
+
 public class TimeSeriesDataPointDto
 {
     public string Label { get; set; } = string.Empty;
