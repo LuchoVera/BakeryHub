@@ -4,18 +4,13 @@ using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
 using BakeryHub.Domain.Interfaces;
 using BakeryHub.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace BakeryHub.Application.Services;
 
 public class TagService : ITagService
 {
     private readonly ITagRepository _tagRepository;
-    private readonly ApplicationDbContext _context; 
+    private readonly ApplicationDbContext _context;
 
     public TagService(ITagRepository tagRepository, ApplicationDbContext context)
     {
@@ -40,14 +35,13 @@ public class TagService : ITagService
     public async Task<TagDto?> CreateTagForAdminAsync(CreateTagDto tagDto, Guid adminTenantId)
     {
         var trimmedName = tagDto.Name.Trim();
-        
         var existingTagByName = await _tagRepository.GetByNameAsync(trimmedName, adminTenantId);
 
         if (existingTagByName != null)
-        { 
-            return null; 
+        {
+            return null;
         }
-        
+
         var newTag = new Tag
         {
             Id = Guid.NewGuid(),
@@ -57,7 +51,7 @@ public class TagService : ITagService
             UpdatedAt = DateTimeOffset.UtcNow
         };
         await _tagRepository.AddAsync(newTag);
-        await _context.SaveChangesAsync(); 
+        await _context.SaveChangesAsync();
         return MapTagToDto(newTag);
     }
 
@@ -66,7 +60,7 @@ public class TagService : ITagService
         var tagToUpdate = await _tagRepository.GetByIdAsync(tagId, adminTenantId);
         if (tagToUpdate == null)
         {
-            return null; 
+            return null;
         }
 
         var trimmedNewName = tagDto.Name.Trim();
@@ -75,7 +69,7 @@ public class TagService : ITagService
             var existingTagWithNewName = await _tagRepository.GetByNameAsync(trimmedNewName, adminTenantId);
             if (existingTagWithNewName != null && existingTagWithNewName.Id != tagId)
             {
-                return null; 
+                return null;
             }
         }
 
@@ -91,13 +85,13 @@ public class TagService : ITagService
         var tag = await _tagRepository.GetByIdAsync(tagId, adminTenantId);
         if (tag == null)
         {
-            return false; 
+            return false;
         }
 
         var success = await _tagRepository.DeleteAsync(tagId, adminTenantId);
         if (success)
         {
-            await _context.SaveChangesAsync(); 
+            await _context.SaveChangesAsync();
             return true;
         }
         return false;

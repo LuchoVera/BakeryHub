@@ -8,7 +8,7 @@ public class Category
 
     public virtual Tenant Tenant { get; set; } = null!;
     public virtual ICollection<Product> Products { get; set; } = new List<Product>();
-    
+
     public bool IsDeleted { get; set; } = false;
     public DateTimeOffset? DeletedAt { get; set; }
 }
