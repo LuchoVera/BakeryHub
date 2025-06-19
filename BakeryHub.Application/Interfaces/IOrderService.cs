@@ -13,4 +13,5 @@ public interface IOrderService
     Task<IEnumerable<OrderDto>> GetOrdersForAdminAsync(Guid tenantId);
     Task<bool> UpdateOrderStatusAsync(Guid orderId, Guid tenantId, OrderStatus newStatus, Guid adminUserId);
     Task<DashboardResponseDto> GetDashboardStatisticsAsync(Guid tenantId, DashboardQueryParametersDto queryParams);
+    Task<OrderDto?> CreateManualOrderForAdminAsync(Guid tenantId, CreateManualOrderDto createManualOrderDto);
 }

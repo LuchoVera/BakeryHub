@@ -184,8 +184,8 @@ public class OrderService : IOrderService
                 UnitPrice = oi.UnitPrice,
                 ProductName = oi.ProductName
             }).ToList() ?? new List<OrderItemDto>(),
-            CustomerName = customerName ?? order.User?.Name,
-            CustomerPhoneNumber = customer?.PhoneNumber,
+            CustomerName = order.CustomerName ?? order.User?.Name,
+            CustomerPhoneNumber = order.CustomerPhoneNumber ?? order.User?.PhoneNumber,
 
             OrderNumber = dailySequenceNumber.HasValue
                           ? GenerateOrderNumber(dailySequenceNumber.Value, order.Id)
@@ -525,5 +525,52 @@ public class OrderService : IOrderService
             }
         }
         return (startDate.ToUniversalTime(), endDate.ToUniversalTime(), periodDesc);
+    }
+
+    public async Task<OrderDto?> CreateManualOrderForAdminAsync(Guid tenantId, CreateManualOrderDto createDto)
+    {
+        var tenantExists = await _context.Tenants.AnyAsync(t => t.Id == tenantId);
+        if (!tenantExists) return null;
+
+        decimal verifiedTotalAmount = 0;
+        var orderItems = new List<OrderItem>();
+        foreach (var itemDto in createDto.Items)
+        {
+            var product = await _productRepository.GetByIdAsync(itemDto.ProductId);
+            if (product == null || !product.IsAvailable || product.TenantId != tenantId)
+            {
+                return null;
+            }
+            orderItems.Add(new OrderItem
+            {
+                Id = Guid.NewGuid(),
+                ProductId = product.Id,
+                ProductName = product.Name,
+                Quantity = itemDto.Quantity,
+                UnitPrice = product.Price
+            });
+            verifiedTotalAmount += product.Price * itemDto.Quantity;
+        }
+
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ApplicationUserId = null,
+            CustomerName = createDto.CustomerName,
+            CustomerPhoneNumber = createDto.CustomerPhoneNumber,
+            OrderDate = DateTimeOffset.UtcNow,
+            DeliveryDate = createDto.DeliveryDate,
+            TotalAmount = verifiedTotalAmount,
+            Status = OrderStatus.Pending,
+            OrderItems = orderItems,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        await _orderRepository.AddOrderAsync(order);
+        await _context.SaveChangesAsync();
+
+        return MapOrderToDto(order);
     }
 }
