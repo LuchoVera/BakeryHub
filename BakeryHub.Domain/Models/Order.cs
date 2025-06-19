@@ -15,6 +15,11 @@ public class Order
     public Guid? ApplicationUserId { get; set; }
     public virtual ApplicationUser? User { get; set; }
 
+    [MaxLength(150)]
+    public string? CustomerName { get; set; }
+
+    [MaxLength(20)]
+    public string? CustomerPhoneNumber { get; set; }
     [Required]
     public DateTimeOffset OrderDate { get; set; }
 
