@@ -94,4 +94,30 @@ public class AdminOrdersController : AdminControllerBase
 
         return NoContent();
     }
+
+    [HttpPost("manual")]
+    [ProducesResponseType(typeof(OrderDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<OrderDto>> CreateManualOrder([FromBody] CreateManualOrderDto createManualOrderDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var tenantId = await GetCurrentAdminTenantIdAsync();
+        if (tenantId == null)
+        {
+            return Forbid();
+        }
+
+        var createdOrder = await _orderService.CreateManualOrderForAdminAsync(tenantId.Value, createManualOrderDto);
+        if (createdOrder == null)
+        {
+            return BadRequest("Could not create order. Check product availability or details.");
+        }
+
+        return CreatedAtAction(nameof(GetOrderDetails), new { orderId = createdOrder.Id }, createdOrder);
+    }
 }
