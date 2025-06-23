@@ -350,4 +350,20 @@ public class PublicTenantsController : ControllerBase
         var tags = await _tagService.GetPublicTagsForTenantAsync(tenant.Id);
         return Ok(tags);
     }
+
+    [HttpGet("{subdomain}/categories")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IEnumerable<CategoryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<CategoryDto>>> GetPublicCategories(string subdomain)
+    {
+        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
+        if (tenant == null)
+        {
+            return NotFound($"Tenant '{subdomain}' not found.");
+        }
+
+        var categories = await _categoryService.GetPublicCategoriesForTenantAsync(tenant.Id);
+        return Ok(categories);
+    }
 }

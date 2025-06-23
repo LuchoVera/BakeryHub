@@ -159,4 +159,9 @@ public class CategoryService : ICategoryService
 
         return sortedCategories;
     }
+    public async Task<IEnumerable<CategoryDto>> GetPublicCategoriesForTenantAsync(Guid tenantId)
+    {
+        var categories = await _categoryRepository.GetAllByTenantAsync(tenantId);
+        return categories.Select(MapCategoryToDto);
+    }
 }
