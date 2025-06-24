@@ -12,4 +12,5 @@ public class Tenant
     public virtual ICollection<CustomerTenantMembership> CustomerMemberships { get; set; }
                     = new List<CustomerTenantMembership>();
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
+    public virtual TenantTheme? Theme { get; set; }
 }
