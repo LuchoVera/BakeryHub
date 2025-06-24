@@ -108,7 +108,10 @@ public class OrderRepository : IOrderRepository
         string? filterDimension = null, string? filterValue = null)
     {
         var query = _context.Orders.AsNoTracking()
-            .Where(o => o.TenantId == tenantId && o.OrderDate >= startDate && o.OrderDate < endDate);
+            .Where(o => o.TenantId == tenantId &&
+                        o.Status == OrderStatus.Received &&
+                        o.OrderDate >= startDate &&
+                        o.OrderDate < endDate);
 
         if (string.IsNullOrEmpty(filterDimension) || string.IsNullOrEmpty(filterValue))
         {
