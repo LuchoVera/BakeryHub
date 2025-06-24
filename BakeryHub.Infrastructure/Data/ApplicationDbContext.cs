@@ -17,6 +17,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderItem> OrderItems { get; set; }
     public DbSet<Tag> Tags { get; set; }
     public DbSet<ProductTag> ProductTags { get; set; }
+    public DbSet<TenantTheme> TenantThemes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -32,6 +33,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
         ConfigureOrderItem(builder);
         ConfigureTag(builder);
         ConfigureProductTag(builder);
+        ConfigureTenantTheme(builder);
 
         builder.Entity<Product>().HasQueryFilter(p => !p.IsDeleted);
         builder.Entity<Category>().HasQueryFilter(c => !c.IsDeleted);
@@ -202,5 +204,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
                   .HasForeignKey(pt => pt.TagId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
+    }
+    private static void ConfigureTenantTheme(ModelBuilder builder)
+    {
+        builder.Entity<Tenant>()
+              .HasOne(t => t.Theme)
+              .WithOne(tt => tt.Tenant)
+              .HasForeignKey<TenantTheme>(tt => tt.TenantId);
     }
 }

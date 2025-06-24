@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Dtos.Enums;
+using BakeryHub.Application.Dtos.Theme;
 using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -44,15 +45,35 @@ public class PublicTenantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TenantPublicInfoDto>> GetTenantPublicInfo(string subdomain)
     {
-        var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
-        if (tenant == null) return NotFound("Tenant not found.");
+        var tenant = await _tenantRepository.GetBySubdomainWithThemeAsync(subdomain.ToLowerInvariant());
+
+        if (tenant == null)
+        {
+            return NotFound("Tenant not found.");
+        }
 
         var tenantInfo = new TenantPublicInfoDto
         {
             Name = tenant.Name,
             Subdomain = tenant.Subdomain,
-            PhoneNumber = tenant?.PhoneNumber
+            PhoneNumber = tenant.PhoneNumber,
+            Theme = tenant.Theme == null ? null : new ThemeSettingsDto
+            {
+                ColorPrimary = tenant.Theme.ColorPrimary,
+                ColorPrimaryDark = tenant.Theme.ColorPrimaryDark,
+                ColorPrimaryLight = tenant.Theme.ColorPrimaryLight,
+                ColorSecondary = tenant.Theme.ColorSecondary,
+                ColorBackground = tenant.Theme.ColorBackground,
+                ColorSurface = tenant.Theme.ColorSurface,
+                ColorTextPrimary = tenant.Theme.ColorTextPrimary,
+                ColorTextSecondary = tenant.Theme.ColorTextSecondary,
+                ColorTextOnPrimary = tenant.Theme.ColorTextOnPrimary,
+                ColorBorder = tenant.Theme.ColorBorder,
+                ColorBorderLight = tenant.Theme.ColorBorderLight,
+                ColorDisabledBg = tenant.Theme.ColorDisabledBg
+            }
         };
+
         return Ok(tenantInfo);
     }
 

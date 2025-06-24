@@ -7,4 +7,5 @@ public interface ITenantRepository
     Task AddAsync(Tenant tenant);
     Task<bool> SubdomainExistsAsync(string subdomain);
     Task<IEnumerable<Tenant>> GetAllAsync();
+    Task<Tenant?> GetBySubdomainWithThemeAsync(string subdomain);
 }

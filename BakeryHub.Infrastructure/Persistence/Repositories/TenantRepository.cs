@@ -36,4 +36,13 @@ public class TenantRepository : ITenantRepository
     {
         return await _context.Tenants.ToListAsync();
     }
+
+    public async Task<Tenant?> GetBySubdomainWithThemeAsync(string subdomain)
+    {
+        var subdomainLower = subdomain?.ToLowerInvariant();
+        return await _context.Tenants
+                        .Include(t => t.Theme)
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(t => t.Subdomain == subdomainLower);
+    }
 }
