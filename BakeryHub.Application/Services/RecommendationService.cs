@@ -1,3 +1,4 @@
+using Azure.Storage.Blobs;
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Interfaces;
 using BakeryHub.Application.Recommendations;
@@ -17,7 +18,7 @@ public class RecommendationService : IRecommendationService
     private readonly IProductRepository _productRepository;
     private readonly ApplicationDbContext _dbContext;
     private readonly IConfiguration _configuration;
-    private readonly string _modelBaseDirectory;
+    private readonly BlobContainerClient _blobContainerClient;
 
     private readonly ConcurrentDictionary<Guid, ITransformer> _tenantModels = new();
     private readonly ConcurrentDictionary<Guid, PredictionEngine<ProductRating, ProductRatingPrediction>> _tenantPredictionEngines = new();
@@ -35,25 +36,20 @@ public class RecommendationService : IRecommendationService
         _dbContext = dbContext;
         _configuration = configuration;
 
-        var configuredModelPath = _configuration["RecommendationSettings:ModelPath"];
-        if (string.IsNullOrWhiteSpace(configuredModelPath))
+        var storageConnectionString = _configuration.GetConnectionString("BlobStorage");
+        if (string.IsNullOrWhiteSpace(storageConnectionString))
         {
-            throw new InvalidOperationException("RecommendationSettings:ModelPath is not configured in appsettings.json.");
+            throw new InvalidOperationException("ConnectionStrings:BlobStorage no está configurada.");
         }
 
-        _modelBaseDirectory = Path.IsPathRooted(configuredModelPath)
-            ? configuredModelPath
-            : Path.Combine(AppContext.BaseDirectory, configuredModelPath);
-
-        if (!Directory.Exists(_modelBaseDirectory))
-        {
-            Directory.CreateDirectory(_modelBaseDirectory);
-        }
+        var blobServiceClient = new BlobServiceClient(storageConnectionString);
+        _blobContainerClient = blobServiceClient.GetBlobContainerClient("tenant-models");
+        _blobContainerClient.CreateIfNotExists();
     }
 
-    private string GetModelPathForTenant(Guid tenantId)
+    private string GetModelBlobNameForTenant(Guid tenantId)
     {
-        return Path.Combine(_modelBaseDirectory, $"model_tenant_{tenantId}.zip");
+        return $"model_tenant_{tenantId}.zip";
     }
 
     private SemaphoreSlim GetTenantLock(Guid tenantId)
@@ -64,60 +60,35 @@ public class RecommendationService : IRecommendationService
     private async Task<(PredictionEngine<ProductRating, ProductRatingPrediction>? Engine, DataMappings? Mappings)>
         EnsureModelAndMappingsLoadedForTenantAsync(Guid tenantId)
     {
-        if (_tenantPredictionEngines.TryGetValue(tenantId, out var cachedEngine) &&
-            _tenantDataMappings.TryGetValue(tenantId, out var cachedMappings))
-        {
-            if (cachedEngine == null && (cachedMappings == null || !cachedMappings.ProductGuidToIntMap.Any()))
-            {
-                return (null, cachedMappings);
-            }
-            if (cachedEngine != null && cachedMappings != null && cachedMappings.ProductGuidToIntMap.Any())
-            {
-                return (cachedEngine, cachedMappings);
-            }
-        }
-
         var tenantLock = GetTenantLock(tenantId);
         await tenantLock.WaitAsync();
 
         try
         {
-            if (_tenantPredictionEngines.TryGetValue(tenantId, out cachedEngine) &&
-                _tenantDataMappings.TryGetValue(tenantId, out cachedMappings))
-            {
-                if (cachedEngine == null && (cachedMappings == null || !cachedMappings.ProductGuidToIntMap.Any()))
-                {
-                    return (null, cachedMappings);
-                }
-                if (cachedEngine != null && cachedMappings != null && cachedMappings.ProductGuidToIntMap.Any())
-                {
-                    return (cachedEngine, cachedMappings);
-                }
-            }
-
             DataMappings? tenantDataMappings;
             ITransformer? tenantTrainedModel = null;
             PredictionEngine<ProductRating, ProductRatingPrediction>? predictionEngine = null;
 
-            var modelPathForTenant = GetModelPathForTenant(tenantId);
-            var dataLoader = new DataLoader(_mlContext, _dbContext);
+            var modelBlobName = GetModelBlobNameForTenant(tenantId);
+            var blobClient = _blobContainerClient.GetBlobClient(modelBlobName);
 
+            var dataLoader = new DataLoader(_mlContext, _dbContext);
             tenantDataMappings = await dataLoader.LoadMappingsAndHistoryForTenantAsync(tenantId);
 
             if (tenantDataMappings == null || !tenantDataMappings.ProductGuidToIntMap.Any() || !tenantDataMappings.UserGuidToFloatMap.Any())
             {
-                _tenantDataMappings[tenantId] = tenantDataMappings ?? new DataMappings();
-                _tenantModels.TryRemove(tenantId, out _);
-                _tenantPredictionEngines.TryRemove(tenantId, out _);
                 return (null, tenantDataMappings);
             }
 
-            if (File.Exists(modelPathForTenant))
+            if (await blobClient.ExistsAsync())
             {
                 try
                 {
                     DataViewSchema modelSchema;
-                    tenantTrainedModel = _mlContext.Model.Load(modelPathForTenant, out modelSchema);
+                    using var stream = new MemoryStream();
+                    await blobClient.DownloadToAsync(stream);
+                    stream.Position = 0;
+                    tenantTrainedModel = _mlContext.Model.Load(stream, out modelSchema);
                 }
                 catch
                 {
@@ -139,7 +110,11 @@ public class RecommendationService : IRecommendationService
                 try
                 {
                     tenantTrainedModel = modelTrainer.TrainModel(trainData);
-                    _mlContext.Model.Save(tenantTrainedModel, trainData.Schema, modelPathForTenant);
+
+                    using var stream = new MemoryStream();
+                    _mlContext.Model.Save(tenantTrainedModel, trainData.Schema, stream);
+                    stream.Position = 0;
+                    await blobClient.UploadAsync(stream, overwrite: true);
                 }
                 catch
                 {
@@ -156,6 +131,70 @@ public class RecommendationService : IRecommendationService
 
             _tenantDataMappings[tenantId] = tenantDataMappings;
             return (predictionEngine, tenantDataMappings);
+        }
+        finally
+        {
+            tenantLock.Release();
+        }
+    }
+
+    public async Task<bool> RetrainTenantModelAsync(Guid tenantId)
+    {
+        var tenantLock = GetTenantLock(tenantId);
+        await tenantLock.WaitAsync();
+
+        try
+        {
+            var modelBlobName = GetModelBlobNameForTenant(tenantId);
+            var blobClient = _blobContainerClient.GetBlobClient(modelBlobName);
+
+            DataMappings? tenantDataMappings = await new DataLoader(_mlContext, _dbContext).LoadMappingsAndHistoryForTenantAsync(tenantId);
+
+            if (tenantDataMappings == null || !tenantDataMappings.ProductGuidToIntMap.Any() || !tenantDataMappings.UserGuidToFloatMap.Any())
+            {
+                if (await blobClient.ExistsAsync()) await blobClient.DeleteIfExistsAsync();
+                return false;
+            }
+
+            IDataView? trainData = new DataLoader(_mlContext, _dbContext).LoadDataForTenant(tenantDataMappings);
+            if (trainData == null || trainData.GetColumn<float>(nameof(ProductRating.UserId)).Count() == 0)
+            {
+                if (await blobClient.ExistsAsync()) await blobClient.DeleteIfExistsAsync();
+                return false;
+            }
+
+            var modelTrainer = new ModelTrainer(_mlContext);
+            ITransformer? newTrainedModel;
+            try
+            {
+                newTrainedModel = modelTrainer.TrainModel(trainData);
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (newTrainedModel != null)
+            {
+                try
+                {
+                    using var stream = new MemoryStream();
+                    _mlContext.Model.Save(newTrainedModel, trainData.Schema, stream);
+                    stream.Position = 0;
+                    await blobClient.UploadAsync(stream, overwrite: true);
+
+                    var newPredictionEngine = _mlContext.Model.CreatePredictionEngine<ProductRating, ProductRatingPrediction>(newTrainedModel);
+                    _tenantModels[tenantId] = newTrainedModel;
+                    _tenantPredictionEngines[tenantId] = newPredictionEngine;
+                    _tenantDataMappings[tenantId] = tenantDataMappings;
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            return false;
         }
         finally
         {
@@ -230,64 +269,5 @@ public class RecommendationService : IRecommendationService
             CategoryId = product.CategoryId,
             CategoryName = product.Category?.Name ?? "Desconocida"
         };
-    }
-
-    public async Task<bool> RetrainTenantModelAsync(Guid tenantId)
-    {
-        var tenantLock = GetTenantLock(tenantId);
-        await tenantLock.WaitAsync();
-
-        try
-        {
-            var modelPathForTenant = GetModelPathForTenant(tenantId);
-            var dataLoader = new DataLoader(_mlContext, _dbContext);
-            DataMappings? tenantDataMappings = await dataLoader.LoadMappingsAndHistoryForTenantAsync(tenantId);
-
-            if (tenantDataMappings == null || !tenantDataMappings.ProductGuidToIntMap.Any() || !tenantDataMappings.UserGuidToFloatMap.Any())
-            {
-                if (File.Exists(modelPathForTenant)) File.Delete(modelPathForTenant);
-                _tenantModels.TryRemove(tenantId, out _);
-                _tenantPredictionEngines.TryRemove(tenantId, out _);
-                _tenantDataMappings.TryRemove(tenantId, out _);
-                return false;
-            }
-
-            IDataView? trainData = dataLoader.LoadDataForTenant(tenantDataMappings);
-            if (trainData == null || trainData.GetColumn<float>(nameof(ProductRating.UserId)).Count() == 0)
-            {
-                if (File.Exists(modelPathForTenant)) File.Delete(modelPathForTenant);
-                _tenantModels.TryRemove(tenantId, out _);
-                _tenantPredictionEngines.TryRemove(tenantId, out _);
-                _tenantDataMappings[tenantId] = tenantDataMappings;
-                return false;
-            }
-
-            var modelTrainer = new ModelTrainer(_mlContext);
-            ITransformer? newTrainedModel;
-            try
-            {
-                newTrainedModel = modelTrainer.TrainModel(trainData);
-            }
-            catch { return false; }
-
-            if (newTrainedModel != null)
-            {
-                try
-                {
-                    _mlContext.Model.Save(newTrainedModel, trainData.Schema, modelPathForTenant);
-                    var newPredictionEngine = _mlContext.Model.CreatePredictionEngine<ProductRating, ProductRatingPrediction>(newTrainedModel);
-                    _tenantModels[tenantId] = newTrainedModel;
-                    _tenantPredictionEngines[tenantId] = newPredictionEngine;
-                    _tenantDataMappings[tenantId] = tenantDataMappings;
-                    return true;
-                }
-                catch { return false; }
-            }
-            return false;
-        }
-        finally
-        {
-            tenantLock.Release();
-        }
     }
 }
