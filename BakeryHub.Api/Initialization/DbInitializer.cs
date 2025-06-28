@@ -27,8 +27,8 @@ public static class DbInitializer
 
             string defaultAdminEmail = "luis@gmail.com";
             string defaultPassword = "qwe123QWE";
-            string defaultSubdomain = "bliss-cake";
-            string defaultBusinessName = "Bliss Cake bakery";
+            string defaultSubdomain = "demo-bakery";
+            string defaultBusinessName = "Demo Bakery";
             string adminName = "Luis Espinoza";
             string adminPhoneNumber = "78318485";
 

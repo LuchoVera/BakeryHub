@@ -15,6 +15,7 @@ using BakeryHub.Application.Interfaces.BackgroundServices;
 using BakeryHub.Api.BackgroundServices;
 using BakeryHub.Application.Services.BackgroundServices;
 
+DotNetEnv.Env.Load();
 var builder = WebApplication.CreateBuilder(args);
 
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
@@ -120,11 +121,11 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    /*using (var scope = app.Services.CreateScope())
+    using (var scope = app.Services.CreateScope())
     {
         var services = scope.ServiceProvider;
         await DbInitializer.InitializeAsync(services);
-    }*/
+    }
     app.UseDeveloperExceptionPage();
     app.UseSwagger();
     app.UseSwaggerUI(c =>
