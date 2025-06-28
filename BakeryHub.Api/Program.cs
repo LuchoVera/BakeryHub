@@ -89,13 +89,11 @@ builder.Services.ConfigureApplicationCookie(options =>
             return Task.CompletedTask;
         }
     };
-
     options.Cookie.HttpOnly = true;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.None;
-    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always; 
+    options.Cookie.SameSite = SameSiteMode.None;  
     options.SlidingExpiration = true;
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
-
 });
 
 builder.Services.AddHttpContextAccessor();
