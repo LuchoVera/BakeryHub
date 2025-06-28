@@ -121,11 +121,13 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
+    /*
     using (var scope = app.Services.CreateScope())
     {
         var services = scope.ServiceProvider;
         await DbInitializer.InitializeAsync(services);
     }
+    */
     app.UseDeveloperExceptionPage();
     app.UseSwagger();
     app.UseSwaggerUI(c =>
