@@ -24,10 +24,16 @@ builder.Services.AddCors(options =>
     options.AddPolicy(name: MyAllowSpecificOrigins,
                       policy =>
                       {
-                        policy.WithOrigins("http://localhost:5173") 
-                            .AllowAnyHeader()
-                            .AllowAnyMethod()
-                            .AllowCredentials();
+                          policy.SetIsOriginAllowed(origin =>
+                          {
+                              if (origin is null) return false;
+                              return origin.Equals("https://bakery-hub.org") ||
+                                     origin.EndsWith(".bakery-hub.org") ||
+                                     origin.Equals("https://localhost:5173");
+                          })
+                          .AllowAnyHeader()
+                          .AllowAnyMethod()
+                          .AllowCredentials();
                       });
 });
 
