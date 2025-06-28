@@ -11,9 +11,9 @@ public interface IAccountService
     Task LogoutAsync();
     Task<DetailedRegistrationResult> RegisterCustomerForTenantAsync(CustomerRegisterDto dto, Guid tenantId);
     Task<AuthResponseDto> LoginAndBuildResponseAsync(LoginDto loginDto);
-    Task<AuthUserDto> GetCurrentUserAsync(ApplicationUser user);
+    Task<AuthUserDto?> GetCurrentUserAsync(ApplicationUser user, string? subdomainContext);
     Task<EmailCheckResultDto> CheckEmailAsync(string email);
     Task<LinkAccountResult> LinkExistingCustomerToTenantAsync(string email, Guid tenantId);
     Task<IdentityResult> ChangePasswordAsync(Guid userId, ChangePasswordDto dto);
-    Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateUserProfileAsync(Guid userId, UpdateUserProfileDto dto);
+    Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateUserProfileAsync(Guid userId, UpdateUserProfileDto dto, string? subdomainContext);
 }

@@ -313,42 +313,76 @@ public class AccountService : IAccountService
             PhoneNumber = user.PhoneNumber
         };
     }
-    public async Task<AuthUserDto> GetCurrentUserAsync(ApplicationUser user)
+    public async Task<AuthUserDto?> GetCurrentUserAsync(ApplicationUser user, string? subdomainContext)
     {
         var roles = await _userManager.GetRolesAsync(user);
-        string? administeredTenantSubdomain = null;
-        Guid? administeredTenantId = null;
-        List<Guid> tenantMemberships = new List<Guid>();
-
-        if (user.TenantId != null && roles.Contains("Admin"))
+        if (string.IsNullOrWhiteSpace(subdomainContext))
         {
-            administeredTenantId = user.TenantId;
-            var tenant = await _context.Tenants
-                .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.Id == user.TenantId.Value);
-            administeredTenantSubdomain = tenant?.Subdomain;
+            if (roles.Contains(AdminRole))
+            {
+                string? administeredTenantSubdomain = null;
+                Guid? administeredTenantId = null;
+
+                if (user.TenantId != null)
+                {
+                    administeredTenantId = user.TenantId;
+                    var tenant = await _context.Tenants
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(t => t.Id == user.TenantId.Value);
+                    administeredTenantSubdomain = tenant?.Subdomain;
+                }
+
+                return new AuthUserDto
+                {
+                    UserId = user.Id,
+                    Email = user.Email!,
+                    Name = user.Name,
+                    Roles = roles,
+                    AdministeredTenantId = administeredTenantId,
+                    AdministeredTenantSubdomain = administeredTenantSubdomain,
+                    TenantMemberships = new List<Guid>(),
+                    PhoneNumber = user.PhoneNumber
+                };
+            }
+            else
+            {
+                return null;
+            }
         }
-
-        if (roles.Contains("Customer"))
+        else
         {
-            tenantMemberships = await _context.CustomerTenantMemberships
-                .Where(m => m.ApplicationUserId == user.Id && m.IsActive)
-                .Select(m => m.TenantId)
-                .ToListAsync();
+            if (roles.Contains(CustomerRole))
+            {
+                var tenant = await _tenantRepository.GetBySubdomainAsync(subdomainContext);
+                if (tenant == null) return null;
+
+                bool isMember = await _context.CustomerTenantMemberships
+                    .AnyAsync(m => m.ApplicationUserId == user.Id && m.TenantId == tenant.Id && m.IsActive);
+
+                if (isMember)
+                {
+                    return new AuthUserDto
+                    {
+                        UserId = user.Id,
+                        Email = user.Email!,
+                        Name = user.Name,
+                        Roles = roles,
+                        TenantMemberships = new List<Guid> { tenant.Id },
+                        PhoneNumber = user.PhoneNumber
+                    };
+                }
+                else
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                return null;
+            }
         }
-
-        return new AuthUserDto
-        {
-            UserId = user.Id,
-            Email = user.Email!,
-            Name = user.Name,
-            Roles = roles,
-            AdministeredTenantId = administeredTenantId,
-            AdministeredTenantSubdomain = administeredTenantSubdomain,
-            TenantMemberships = tenantMemberships,
-            PhoneNumber = user.PhoneNumber
-        };
     }
+
     public async Task<EmailCheckResultDto> CheckEmailAsync(string email)
     {
         var result = new EmailCheckResultDto { Exists = false };
@@ -467,7 +501,7 @@ public class AccountService : IAccountService
         return await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
     }
 
-    public async Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateUserProfileAsync(Guid userId, UpdateUserProfileDto dto)
+    public async Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateUserProfileAsync(Guid userId, UpdateUserProfileDto dto, string? subdomainContext)
     {
         var user = await _userManager.FindByIdAsync(userId.ToString());
         if (user == null)
@@ -485,7 +519,8 @@ public class AccountService : IAccountService
             return (result, null);
         }
 
-        var updatedAuthUser = await GetCurrentUserAsync(user);
+        var updatedAuthUser = await GetCurrentUserAsync(user, subdomainContext);
+
         return (result, updatedAuthUser);
     }
 }

@@ -111,7 +111,7 @@ public class AccountsController : ControllerBase
     [Authorize]
     [ProducesResponseType(typeof(AuthUserDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<AuthUserDto>> GetCurrentUser()
+    public async Task<ActionResult<AuthUserDto>> GetCurrentUser([FromQuery] string? subdomain)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user == null)
@@ -119,7 +119,11 @@ public class AccountsController : ControllerBase
             return Unauthorized();
         }
 
-        var userInfo = await _accountService.GetCurrentUserAsync(user);
+        var userInfo = await _accountService.GetCurrentUserAsync(user, subdomain);
+        if (userInfo == null)
+        {
+            return Unauthorized();
+        }
         return Ok(userInfo);
     }
 
@@ -166,7 +170,7 @@ public class AccountsController : ControllerBase
     [ProducesResponseType(typeof(AuthUserDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> UpdateUserProfile([FromBody] UpdateUserProfileDto updateUserProfileDto)
+    public async Task<IActionResult> UpdateUserProfile([FromBody] UpdateUserProfileDto updateUserProfileDto, [FromQuery] string? subdomain)
     {
         if (!ModelState.IsValid)
         {
@@ -174,7 +178,7 @@ public class AccountsController : ControllerBase
         }
 
         var userId = GetCurrentUserId();
-        var (result, updatedUser) = await _accountService.UpdateUserProfileAsync(userId, updateUserProfileDto);
+        var (result, updatedUser) = await _accountService.UpdateUserProfileAsync(userId, updateUserProfileDto, subdomain);
 
         if (result.Succeeded && updatedUser != null)
         {
