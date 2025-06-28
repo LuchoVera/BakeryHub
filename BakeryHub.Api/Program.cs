@@ -24,15 +24,10 @@ builder.Services.AddCors(options =>
     options.AddPolicy(name: MyAllowSpecificOrigins,
                       policy =>
                       {
-                          policy.SetIsOriginAllowed(origin =>
-                                  origin != null && (
-                                      origin.EndsWith(".localhost:5173") ||
-                                      origin.Equals("http://localhost:5173")
-                                  )
-                              )
-                              .AllowAnyHeader()
-                   .AllowAnyMethod()
-                   .AllowCredentials();
+                        policy.WithOrigins("http://localhost:5173") 
+                            .AllowAnyHeader()
+                            .AllowAnyMethod()
+                            .AllowCredentials();
                       });
 });
 
