@@ -31,6 +31,6 @@ public class AdminRegisterDto
 
     [Required]
     [RegularExpression(@"^[a-z0-9]+(?:-[a-z0-9]+)*$", ErrorMessage = "Subdomain must be lowercase alphanumeric with optional hyphens.")]
-    [StringLength(10, MinimumLength = 3)]
+    [StringLength(30, MinimumLength = 3)]
     public required string Subdomain { get; set; }
 }
