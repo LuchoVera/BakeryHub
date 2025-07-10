@@ -29,14 +29,15 @@ services:
       postgres:
         condition: service_healthy
   BakeryHub:
-    image: bakeryhub-api:latest 
+    image: bakeryhub-api:latest
     build:
       context: .
       dockerfile: Dockerfile
     container_name: BakeryHub
     environment:
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=yourdatabase;Username=yourusername;Password=yourpassword
-      - ASPNETCORE_URLS=http://+:80 
+        - ASPNETCORE_ENVIRONMENT=Development
+        - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=yourdatabase;Username=yourusername;Password=yourpassword
+        - ASPNETCORE_URLS=http://+:80
     depends_on:
       postgres:
         condition: service_healthy
