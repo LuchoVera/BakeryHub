@@ -1,3 +1,4 @@
+using System.Web;
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Dtos.Enums;
 using BakeryHub.Application.Interfaces;
@@ -6,6 +7,7 @@ using BakeryHub.Domain.Interfaces;
 using BakeryHub.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace BakeryHub.Application.Services;
 
@@ -16,6 +18,8 @@ public class AccountService : IAccountService
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly ITenantRepository _tenantRepository;
     private readonly ApplicationDbContext _context;
+    private readonly IEmailService _emailService;
+    private readonly IConfiguration _configuration;
     private const string AdminRole = "Admin";
     private const string CustomerRole = "Customer";
 
@@ -24,13 +28,17 @@ public class AccountService : IAccountService
         SignInManager<ApplicationUser> signInManager,
         RoleManager<ApplicationRole> roleManager,
         ITenantRepository tenantRepository,
-        ApplicationDbContext context)
+        ApplicationDbContext context,
+        IEmailService emailService,
+        IConfiguration configuration)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _roleManager = roleManager;
         _tenantRepository = tenantRepository;
         _context = context;
+        _emailService = emailService;
+        _configuration = configuration;
     }
 
     public async Task<(IdentityResult Result, Guid? UserId)> RegisterAdminAsync(AdminRegisterDto dto)
@@ -522,5 +530,42 @@ public class AccountService : IAccountService
         var updatedAuthUser = await GetCurrentUserAsync(user, subdomainContext);
 
         return (result, updatedAuthUser);
+    }
+
+    public async Task<IdentityResult> ForgotPasswordAsync(ForgotPasswordDto dto)
+    {
+        var user = await _userManager.FindByEmailAsync(dto.Email);
+
+        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+        {
+            return IdentityResult.Success;
+        }
+
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var encodedToken = HttpUtility.UrlEncode(token);
+
+        var resetPasswordUrl = _configuration["FrontendSettings:ResetPasswordUrl"];
+        var resetLink = $"{resetPasswordUrl}?email={HttpUtility.UrlEncode(user.Email)}&token={encodedToken}";
+        var emailBody = $"<h1>Restablece tu Contraseña</h1>" +
+                        $"<p>Por favor, haz clic en el siguiente enlace para restablecer tu contraseña:</p>" +
+                        $"<p><a href='{resetLink}'>Restablecer Contraseña</a></p>" +
+                        $"<p>Si no solicitaste esto, puedes ignorar este correo de forma segura.</p>";
+
+        await _emailService.SendEmailAsync(user.Email, "Restablecer tu contraseña de BakeryHub", emailBody);
+
+        return IdentityResult.Success;
+    }
+
+    public async Task<IdentityResult> ResetPasswordAsync(ResetPasswordDto dto)
+    {
+        var user = await _userManager.FindByEmailAsync(dto.Email);
+        if (user == null)
+        {
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidRequest", Description = "Invalid password reset request." });
+        }
+
+        var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
+
+        return result;
     }
 }
