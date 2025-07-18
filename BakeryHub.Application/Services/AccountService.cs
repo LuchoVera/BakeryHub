@@ -1,3 +1,4 @@
+using System.Web;
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Dtos.Enums;
 using BakeryHub.Application.Interfaces;
@@ -6,6 +7,7 @@ using BakeryHub.Domain.Interfaces;
 using BakeryHub.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace BakeryHub.Application.Services;
 
@@ -16,6 +18,8 @@ public class AccountService : IAccountService
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly ITenantRepository _tenantRepository;
     private readonly ApplicationDbContext _context;
+    private readonly IEmailService _emailService;
+    private readonly IConfiguration _configuration;
     private const string AdminRole = "Admin";
     private const string CustomerRole = "Customer";
 
@@ -24,13 +28,17 @@ public class AccountService : IAccountService
         SignInManager<ApplicationUser> signInManager,
         RoleManager<ApplicationRole> roleManager,
         ITenantRepository tenantRepository,
-        ApplicationDbContext context)
+        ApplicationDbContext context,
+        IEmailService emailService,
+        IConfiguration configuration)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _roleManager = roleManager;
         _tenantRepository = tenantRepository;
         _context = context;
+        _emailService = emailService;
+        _configuration = configuration;
     }
 
     public async Task<(IdentityResult Result, Guid? UserId)> RegisterAdminAsync(AdminRegisterDto dto)
@@ -522,5 +530,56 @@ public class AccountService : IAccountService
         var updatedAuthUser = await GetCurrentUserAsync(user, subdomainContext);
 
         return (result, updatedAuthUser);
+    }
+
+    public async Task<IdentityResult> ForgotPasswordAsync(ForgotPasswordDto dto)
+    {
+        var user = await _userManager.FindByEmailAsync(dto.Email);
+
+        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+        {
+            return IdentityResult.Success;
+        }
+
+        var token = new Random().Next(100000, 999999).ToString();
+        user.PasswordResetToken = token;
+        user.PasswordResetTokenExpirationDate = DateTimeOffset.UtcNow.AddMinutes(10);
+
+        await _userManager.UpdateAsync(user);
+
+        var emailBody = $"<h1>Restablece tu Contraseña</h1>" +
+                        $"<p>Usa el siguiente código para restablecer tu contraseña. El código es válido por 10 minutos:</p>" +
+                        $"<h2>{token}</h2>" +
+                        $"<p>Si no solicitaste esto, puedes ignorar este correo.</p>";
+
+        await _emailService.SendEmailAsync(user.Email, "Código para restablecer tu contraseña", emailBody);
+
+        return IdentityResult.Success;
+    }
+
+    public async Task<IdentityResult> ResetPasswordAsync(ResetPasswordDto dto)
+    {
+        var user = await _userManager.FindByEmailAsync(dto.Email);
+        if (user == null)
+        {
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidRequest", Description = "Solicitud de reseteo de contraseña inválida." });
+        }
+
+        if (user.PasswordResetToken != dto.Token || user.PasswordResetTokenExpirationDate <= DateTimeOffset.UtcNow)
+        {
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El código es inválido o ha expirado." });
+        }
+
+        var identityToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await _userManager.ResetPasswordAsync(user, identityToken, dto.NewPassword);
+
+        if (result.Succeeded)
+        {
+            user.PasswordResetToken = null;
+            user.PasswordResetTokenExpirationDate = null;
+            await _userManager.UpdateAsync(user);
+        }
+
+        return result;
     }
 }

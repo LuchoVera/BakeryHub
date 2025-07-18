@@ -188,4 +188,42 @@ public class AccountsController : ControllerBase
         AddIdentityErrors(result);
         return BadRequest(ModelState);
     }
+
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto forgotPasswordDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        await _accountService.ForgotPasswordAsync(forgotPasswordDto);
+
+        return Ok(new { message = "A password reset link has been sent." });
+    }
+
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto resetPasswordDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var result = await _accountService.ResetPasswordAsync(resetPasswordDto);
+
+        if (result.Succeeded)
+        {
+            return Ok(new { message = "Your password has been reset successfully." });
+        }
+
+        AddIdentityErrors(result);
+        return BadRequest(ModelState);
+    }
 }

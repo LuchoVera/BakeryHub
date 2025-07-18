@@ -14,6 +14,7 @@ using System.Text.Json.Serialization;
 using BakeryHub.Application.Interfaces.BackgroundServices;
 using BakeryHub.Api.BackgroundServices;
 using BakeryHub.Application.Services.BackgroundServices;
+using BakeryHub.Application.Models;
 
 DotNetEnv.Env.Load();
 var builder = WebApplication.CreateBuilder(args);
@@ -29,7 +30,8 @@ builder.Services.AddCors(options =>
                               if (origin is null) return false;
                               return origin.Equals("https://bakery-hub.org") ||
                                      origin.EndsWith(".bakery-hub.org") ||
-                                     origin.Equals("https://localhost:5173");
+                                     origin.Equals("https://localhost:5173") ||
+                                     origin.Equals("http://localhost:5000");
                           })
                           .AllowAnyHeader()
                           .AllowAnyMethod()
@@ -91,12 +93,13 @@ builder.Services.ConfigureApplicationCookie(options =>
         }
     };
     options.Cookie.HttpOnly = true;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always; 
-    options.Cookie.SameSite = SameSiteMode.None;  
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.None;
     options.SlidingExpiration = true;
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
 });
 
+builder.Services.Configure<MailSettings>(builder.Configuration.GetSection("MailSettings"));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
@@ -110,10 +113,14 @@ builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<ITenantManagementService, TenantManagementService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddSingleton<MLContext>();
-builder.Services.AddScoped<IRecommendationService, RecommendationService>();
-builder.Services.AddScoped<IModelRetrainingService, ModelRetrainingService>();
-builder.Services.AddHostedService<ScheduledRecommendationRetrainingService>();
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+    builder.Services.AddScoped<IModelRetrainingService, ModelRetrainingService>();
+    builder.Services.AddHostedService<ScheduledRecommendationRetrainingService>();
+}
 builder.Services.AddScoped<ITagService, TagService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 
 var app = builder.Build();

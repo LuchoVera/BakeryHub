@@ -13,5 +13,6 @@ public class ApplicationUser : IdentityUser<Guid>
     public virtual Tenant? AdministeredTenant { get; set; }
     public virtual ICollection<CustomerTenantMembership> TenantMemberships { get; set; } = new List<CustomerTenantMembership>();
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
-
+    public string? PasswordResetToken { get; set; }
+    public DateTimeOffset? PasswordResetTokenExpirationDate { get; set; }
 }

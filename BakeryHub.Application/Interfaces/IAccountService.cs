@@ -16,4 +16,6 @@ public interface IAccountService
     Task<LinkAccountResult> LinkExistingCustomerToTenantAsync(string email, Guid tenantId);
     Task<IdentityResult> ChangePasswordAsync(Guid userId, ChangePasswordDto dto);
     Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateUserProfileAsync(Guid userId, UpdateUserProfileDto dto, string? subdomainContext);
+    Task<IdentityResult> ForgotPasswordAsync(ForgotPasswordDto dto);
+    Task<IdentityResult> ResetPasswordAsync(ResetPasswordDto dto);
 }

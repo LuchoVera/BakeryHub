@@ -17,11 +17,31 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
 
         var configuration = new ConfigurationBuilder()
             .SetBasePath(apiProjectPath)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+            .AddJsonFile("appsettings.Development.json", optional: true)
             .AddEnvironmentVariables()
             .Build();
 
         var connectionString = configuration.GetConnectionString("DefaultConnection");
+
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            var solutionRootPath = Path.GetFullPath(Path.Combine(apiProjectPath, ".."));
+            var envFilePath = Path.Combine(solutionRootPath, ".env");
+
+            if (File.Exists(envFilePath))
+            {
+                foreach (var line in File.ReadAllLines(envFilePath))
+                {
+                    var parts = line.Split('=', 2);
+                    if (parts.Length == 2 && parts[0].Trim() == "ConnectionStrings__DefaultConnection")
+                    {
+                        connectionString = parts[1].Trim().Trim('"');
+                        break;
+                    }
+                }
+            }
+        }
 
         if (string.IsNullOrEmpty(connectionString))
         {

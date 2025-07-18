@@ -34,15 +34,13 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: BakeryHub
-    environment:
-        - ASPNETCORE_ENVIRONMENT=Development
-        - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=yourdatabase;Username=yourusername;Password=yourpassword
-        - ASPNETCORE_URLS=http://+:80
+    env_file:
+      - .env
+    ports:
+      - "5000:80"
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "5000:80"
 
 volumes:
   postgres_data:

@@ -16,7 +16,7 @@ public class PublicTenantsController : ControllerBase
     private readonly ITenantRepository _tenantRepository;
     private readonly IAccountService _accountService;
     private readonly IProductService _productService;
-    private readonly IRecommendationService _recommendationService;
+    private readonly IRecommendationService? _recommendationService;
     private readonly IOrderService _orderService;
     private readonly ICategoryService _categoryService;
     private readonly ITagService _tagService;
@@ -25,18 +25,18 @@ public class PublicTenantsController : ControllerBase
         ITenantRepository tenantRepository,
         IProductService productService,
         IAccountService accountService,
-        IRecommendationService recommendationService,
         IOrderService orderService,
         ICategoryService categoryService,
-        ITagService tagService)
+        ITagService tagService,
+        IRecommendationService? recommendationService = null)
     {
         _tenantRepository = tenantRepository;
         _productService = productService;
         _accountService = accountService;
-        _recommendationService = recommendationService;
         _orderService = orderService;
         _categoryService = categoryService;
         _tagService = tagService;
+        _recommendationService = recommendationService;
     }
 
     [HttpGet("{subdomain}")]
@@ -246,6 +246,10 @@ public class PublicTenantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<IEnumerable<ProductDto>>> GetRecommendations(string subdomain)
     {
+        if (_recommendationService == null)
+        {
+            return Ok(Enumerable.Empty<ProductDto>());
+        }
         var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
         if (tenant == null) return NotFound($"Tenant '{subdomain}' not found.");
 
