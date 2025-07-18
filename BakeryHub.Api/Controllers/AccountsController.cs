@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using BakeryHub.Application.Dtos;
+using BakeryHub.Application.Dtos.Admin;
 using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
 using BakeryHub.Infrastructure.Persistence;
@@ -221,6 +222,30 @@ public class AccountsController : ControllerBase
         if (result.Succeeded)
         {
             return Ok(new { message = "Your password has been reset successfully." });
+        }
+
+        AddIdentityErrors(result);
+        return BadRequest(ModelState);
+    }
+
+    [HttpPut("me/admin-profile")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(AuthUserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateAdminProfile([FromBody] UpdateAdminProfileDto updateAdminProfileDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var userId = GetCurrentUserId();
+        var (result, updatedUser) = await _accountService.UpdateAdminProfileAsync(userId, updateAdminProfileDto);
+
+        if (result.Succeeded && updatedUser != null)
+        {
+            return Ok(updatedUser);
         }
 
         AddIdentityErrors(result);

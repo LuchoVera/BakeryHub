@@ -1,4 +1,5 @@
 using BakeryHub.Application.Dtos;
+using BakeryHub.Application.Dtos.Admin;
 using BakeryHub.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 namespace BakeryHub.Application.Interfaces;
@@ -18,4 +19,5 @@ public interface IAccountService
     Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateUserProfileAsync(Guid userId, UpdateUserProfileDto dto, string? subdomainContext);
     Task<IdentityResult> ForgotPasswordAsync(ForgotPasswordDto dto);
     Task<IdentityResult> ResetPasswordAsync(ResetPasswordDto dto);
+    Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateAdminProfileAsync(Guid adminUserId, UpdateAdminProfileDto dto);
 }

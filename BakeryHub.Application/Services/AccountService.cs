@@ -1,5 +1,6 @@
 using System.Web;
 using BakeryHub.Application.Dtos;
+using BakeryHub.Application.Dtos.Admin;
 using BakeryHub.Application.Dtos.Enums;
 using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
@@ -581,5 +582,43 @@ public class AccountService : IAccountService
         }
 
         return result;
+    }
+
+    public async Task<(IdentityResult Result, AuthUserDto? UpdatedUser)> UpdateAdminProfileAsync(Guid adminUserId, UpdateAdminProfileDto dto)
+    {
+        var adminUser = await _userManager.FindByIdAsync(adminUserId.ToString());
+        if (adminUser == null)
+        {
+            return (IdentityResult.Failed(new IdentityError { Code = "UserNotFound" }), null);
+        }
+
+        if (adminUser.TenantId == null)
+        {
+            return (IdentityResult.Failed(new IdentityError { Code = "TenantNotFound" }), null);
+        }
+
+        var tenant = await _context.Tenants.FindAsync(adminUser.TenantId);
+        if (tenant == null)
+        {
+            return (IdentityResult.Failed(new IdentityError { Code = "TenantNotFound" }), null);
+        }
+
+        adminUser.Name = dto.AdminName;
+        adminUser.PhoneNumber = dto.PhoneNumber;
+        adminUser.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var userUpdateResult = await _userManager.UpdateAsync(adminUser);
+        if (!userUpdateResult.Succeeded)
+        {
+            return (userUpdateResult, null);
+        }
+
+        tenant.Name = dto.BusinessName;
+        _context.Tenants.Update(tenant);
+        await _context.SaveChangesAsync();
+
+        var updatedAuthUser = await GetCurrentUserAsync(adminUser, null);
+
+        return (IdentityResult.Success, updatedAuthUser);
     }
 }
