@@ -541,17 +541,18 @@ public class AccountService : IAccountService
             return IdentityResult.Success;
         }
 
-        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-        var encodedToken = HttpUtility.UrlEncode(token);
+        var token = new Random().Next(100000, 999999).ToString();
+        user.PasswordResetToken = token;
+        user.PasswordResetTokenExpirationDate = DateTimeOffset.UtcNow.AddMinutes(10);
 
-        var resetPasswordUrl = _configuration["FrontendSettings:ResetPasswordUrl"];
-        var resetLink = $"{resetPasswordUrl}?email={HttpUtility.UrlEncode(user.Email)}&token={encodedToken}";
+        await _userManager.UpdateAsync(user);
+
         var emailBody = $"<h1>Restablece tu Contraseña</h1>" +
-                        $"<p>Por favor, haz clic en el siguiente enlace para restablecer tu contraseña:</p>" +
-                        $"<p><a href='{resetLink}'>Restablecer Contraseña</a></p>" +
-                        $"<p>Si no solicitaste esto, puedes ignorar este correo de forma segura.</p>";
+                        $"<p>Usa el siguiente código para restablecer tu contraseña. El código es válido por 10 minutos:</p>" +
+                        $"<h2>{token}</h2>" +
+                        $"<p>Si no solicitaste esto, puedes ignorar este correo.</p>";
 
-        await _emailService.SendEmailAsync(user.Email, "Restablecer tu contraseña de BakeryHub", emailBody);
+        await _emailService.SendEmailAsync(user.Email, "Código para restablecer tu contraseña", emailBody);
 
         return IdentityResult.Success;
     }
@@ -561,10 +562,23 @@ public class AccountService : IAccountService
         var user = await _userManager.FindByEmailAsync(dto.Email);
         if (user == null)
         {
-            return IdentityResult.Failed(new IdentityError { Code = "InvalidRequest", Description = "Invalid password reset request." });
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidRequest", Description = "Solicitud de reseteo de contraseña inválida." });
         }
 
-        var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
+        if (user.PasswordResetToken != dto.Token || user.PasswordResetTokenExpirationDate <= DateTimeOffset.UtcNow)
+        {
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El código es inválido o ha expirado." });
+        }
+
+        var identityToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await _userManager.ResetPasswordAsync(user, identityToken, dto.NewPassword);
+
+        if (result.Succeeded)
+        {
+            user.PasswordResetToken = null;
+            user.PasswordResetTokenExpirationDate = null;
+            await _userManager.UpdateAsync(user);
+        }
 
         return result;
     }
