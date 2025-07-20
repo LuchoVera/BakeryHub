@@ -83,6 +83,7 @@ public class OrderRepository : IOrderRepository
             .Include(o => o.User)
             .OrderByDescending(o => o.OrderDate)
             .AsNoTracking()
+            .IgnoreQueryFilters()
             .ToListAsync();
     }
 
