@@ -39,7 +39,7 @@ public class RecommendationService : IRecommendationService
         var storageConnectionString = _configuration.GetConnectionString("BlobStorage");
         if (string.IsNullOrWhiteSpace(storageConnectionString))
         {
-            throw new InvalidOperationException("ConnectionStrings:BlobStorage no está configurada.");
+            throw new InvalidOperationException("ConnectionStrings:BlobStorage is not configured.");
         }
 
         var blobServiceClient = new BlobServiceClient(storageConnectionString);
@@ -267,7 +267,7 @@ public class RecommendationService : IRecommendationService
             Images = product.Images ?? new List<string>(),
             LeadTimeDisplay = string.IsNullOrWhiteSpace(product.LeadTime) ? "N/A" : product.LeadTime,
             CategoryId = product.CategoryId,
-            CategoryName = product.Category?.Name ?? "Desconocida"
+            CategoryName = product.Category?.Name ?? "Unknown"
         };
     }
 }
