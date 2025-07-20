@@ -1,6 +1,7 @@
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
+using BakeryHub.Domain.Enums;
 using BakeryHub.Domain.Interfaces;
 using BakeryHub.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -229,6 +230,21 @@ public class ProductService : IProductService
 
         if (productToSoftDelete == null) return false;
         if (productToSoftDelete.IsDeleted) return true;
+
+        var activeOrderStatus = new[] {
+        OrderStatus.Pending,
+        OrderStatus.Confirmed,
+        OrderStatus.Preparing,
+        OrderStatus.Ready
+    };
+
+        bool isInActiveOrder = await _context.OrderItems
+            .AnyAsync(oi => oi.ProductId == productId && activeOrderStatus.Contains(oi.Order.Status));
+
+        if (isInActiveOrder)
+        {
+            throw new InvalidOperationException("This product cannot be deleted because it is part of one or more active orders.");
+        }
 
         productToSoftDelete.IsDeleted = true;
         productToSoftDelete.DeletedAt = DateTimeOffset.UtcNow;

@@ -111,10 +111,21 @@ public class ProductsController : AdminControllerBase
         var adminTenantId = await GetCurrentAdminTenantIdAsync();
         if (adminTenantId == null) return Forbid("Admin not associated with a tenant.");
 
-        var success = await _productService.DeleteProductForAdminAsync(id, adminTenantId.Value);
+        try
+        {
+            var success = await _productService.DeleteProductForAdminAsync(id, adminTenantId.Value);
 
-        if (!success) return NotFound($"Product with ID {id} not found for your tenant.");
-        return NoContent();
+            if (!success)
+            {
+                return NotFound($"Product with ID {id} not found for your tenant.");
+            }
+
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPatch("{id:guid}/availability")]
