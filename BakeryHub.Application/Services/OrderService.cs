@@ -38,14 +38,12 @@ public class OrderService : IOrderService
         var tenantExists = await _context.Tenants.AnyAsync(t => t.Id == tenantId);
         if (!tenantExists)
         {
-            Console.WriteLine($"Tenant not found with ID: {tenantId}");
             return null;
         }
 
         var user = await _userManager.FindByIdAsync(applicationUserId.ToString());
         if (user == null)
         {
-            Console.WriteLine($"User not found with ID: {applicationUserId}");
             return null;
         }
 
@@ -57,13 +55,7 @@ public class OrderService : IOrderService
             var product = await _productRepository.GetByIdAsync(itemDto.ProductId);
             if (product == null || !product.IsAvailable || product.TenantId != tenantId)
             {
-                Console.WriteLine($"Product validation failed for ID: {itemDto.ProductId}. Found: {product != null}, Available: {product?.IsAvailable}, Belongs to Tenant: {product?.TenantId == tenantId}");
                 return null;
-            }
-
-            if (product.Price != itemDto.UnitPrice)
-            {
-                Console.WriteLine($"Price discrepancy for product {product.Name}. Frontend: {itemDto.UnitPrice}, DB: {product.Price}. Using DB price.");
             }
 
             orderItems.Add(new OrderItem
@@ -79,7 +71,6 @@ public class OrderService : IOrderService
 
         if (Math.Abs(verifiedTotalAmount - createOrderDto.TotalAmount) > 0.001m)
         {
-            Console.WriteLine($"Total amount discrepancy. Frontend: {createOrderDto.TotalAmount}, Calculated: {verifiedTotalAmount}");
             return null;
         }
 

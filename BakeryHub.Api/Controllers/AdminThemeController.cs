@@ -59,7 +59,7 @@ public class AdminThemeController : AdminControllerBase
     {
         var adminUserId = GetCurrentAdminUserId();
         var success = await _tenantService.ResetPublicThemeAsync(adminUserId);
-        if (!success) return BadRequest("No se pudo restaurar el tema público.");
+        if (!success) return BadRequest("Could not reset public theme.");
         return NoContent();
     }
 
@@ -70,7 +70,7 @@ public class AdminThemeController : AdminControllerBase
     {
         var adminUserId = GetCurrentAdminUserId();
         var success = await _tenantService.ResetAdminThemeAsync(adminUserId);
-        if (!success) return BadRequest("No se pudo restaurar el tema de administración.");
+        if (!success) return BadRequest("Could not reset admin theme.");
         return NoContent();
     }
 }

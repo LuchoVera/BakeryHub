@@ -1,4 +1,3 @@
-using System.Web;
 using BakeryHub.Application.Dtos;
 using BakeryHub.Application.Dtos.Admin;
 using BakeryHub.Application.Dtos.Enums;
@@ -279,7 +278,7 @@ public class AccountService : IAccountService
     {
         if (!await _roleManager.RoleExistsAsync(roleName))
         {
-            var result = await _roleManager.CreateAsync(new ApplicationRole(roleName));
+            await _roleManager.CreateAsync(new ApplicationRole(roleName));
         }
     }
 
@@ -505,8 +504,15 @@ public class AccountService : IAccountService
         var user = await _userManager.FindByIdAsync(userId.ToString());
         if (user == null)
         {
-            return IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "Usuario no encontrado." });
+            return IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "User not found." });
         }
+
+        var isSameAsOldPassword = await _userManager.CheckPasswordAsync(user, dto.NewPassword);
+        if (isSameAsOldPassword)
+        {
+            return IdentityResult.Failed(new IdentityError { Code = "SameAsOldPassword", Description = "The new password cannot be the same as the current password." });
+        }
+
         return await _userManager.ChangePasswordAsync(user, dto.CurrentPassword, dto.NewPassword);
     }
 
@@ -515,7 +521,7 @@ public class AccountService : IAccountService
         var user = await _userManager.FindByIdAsync(userId.ToString());
         if (user == null)
         {
-            return (IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "Usuario no encontrado." }), null);
+            return (IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "User not found." }), null);
         }
 
         user.Name = dto.Name;
@@ -563,12 +569,12 @@ public class AccountService : IAccountService
         var user = await _userManager.FindByEmailAsync(dto.Email);
         if (user == null)
         {
-            return IdentityResult.Failed(new IdentityError { Code = "InvalidRequest", Description = "Solicitud de reseteo de contraseña inválida." });
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidRequest", Description = "Invalid password reset request." });
         }
 
         if (user.PasswordResetToken != dto.Token || user.PasswordResetTokenExpirationDate <= DateTimeOffset.UtcNow)
         {
-            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El código es inválido o ha expirado." });
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "The code is invalid or has expired." });
         }
 
         var identityToken = await _userManager.GeneratePasswordResetTokenAsync(user);
