@@ -134,31 +134,31 @@ public static class DbInitializer
                     createdProductDtos = (await productService.GetAllProductsForAdminAsync(tenantId.Value)).ToList();
                 }
 
-
-
-                var originalCustomerProfiles = new List<(string Name, List<string> PreferredCategoryNames)>
+                var customerPersonas = new List<(string Name, string Persona, List<string> PreferredCategories)>
                 {
-                    ("Ana García", new List<string> { "Tortas Clasicas", "Masitas Secas" }),
-                    ("Luis Rodríguez", new List<string> { "Panadería Salada", "Bebidas" }),
-                    ("Carmen Fernández", new List<string> { "Postres Frios", "Especialidades" }),
-                    ("Javier Martínez", new List<string> { "Tortas Premium", "Chocolatería" }),
-                    ("Isabel Sánchez", new List<string> { "Vegano", "Bebidas" }),
-                    ("Miguel González", new List<string> { "Masitas Secas", "Chocolatería" }),
-                    ("Laura Jiménez", new List<string> { "Tortas Clasicas", "Postres Frios" }),
-                    ("David Moreno", new List<string> { "Panadería Salada", "Especialidades" }),
-                    ("Sofía Álvarez", new List<string> { "Tortas Premium", "Vegano" }),
-                    ("Pedro Ramírez", new List<string> { "Bebidas", "Masitas Secas" }),
-                    ("Elena Torres", new List<string> { "Chocolatería", "Especialidades" }),
-                    ("Daniel Ruiz", new List<string> { "Tortas Clasicas" }),
-                    ("Valeria Morales", new List<string> { "Vegano", "Postres Frios" }),
-                    ("Carlos Ortega", new List<string> { "Tortas Premium" }),
-                    ("Lucía Castillo", new List<string> { "Panadería Salada" })
+                    ("Javier Martínez", "PartyHost", new List<string> { "Tortas Premium", "Chocolatería", "Panadería Salada", "Bebidas" }),
+                    ("David Moreno", "PartyHost", new List<string> { "Panadería Salada", "Especialidades", "Bebidas" }),
+
+                    ("Ana García", "Traditionalist", new List<string> { "Tortas Clasicas", "Masitas Secas" }),
+                    ("Luis Rodríguez", "Traditionalist", new List<string> { "Panadería Salada", "Bebidas" }),
+                    ("Miguel González", "Traditionalist", new List<string> { "Masitas Secas", "Chocolatería" }),
+                    ("Pedro Ramírez", "Traditionalist", new List<string> { "Bebidas", "Masitas Secas" }),
+                    ("Lucía Castillo", "Traditionalist", new List<string> { "Panadería Salada" }),
+
+                    ("Carmen Fernández", "DessertLover", new List<string> { "Postres Frios", "Especialidades" }),
+                    ("Laura Jiménez", "DessertLover", new List<string> { "Tortas Clasicas", "Postres Frios" }),
+                    ("Elena Torres", "DessertLover", new List<string> { "Chocolatería", "Especialidades" }),
+                    ("Daniel Ruiz", "DessertLover", new List<string> { "Tortas Clasicas" }),
+                     ("Carlos Ortega", "DessertLover", new List<string> { "Tortas Premium" }),
+
+                    ("Isabel Sánchez", "HealthConscious", new List<string> { "Vegano", "Bebidas" }),
+                    ("Sofía Álvarez", "HealthConscious", new List<string> { "Tortas Premium", "Vegano" }),
+                    ("Valeria Morales", "HealthConscious", new List<string> { "Vegano", "Postres Frios" })
                 };
 
                 string customerPasswordForSeeding = "qwe123QWE";
                 var createdCustomerUsers = new List<ApplicationUser>();
-                var customerSpecificPreferences = new Dictionary<Guid, List<Guid>>();
-
+                var customerPersonaMap = new Dictionary<Guid, (string Persona, List<Guid> PreferredCategories)>();
 
                 var existingTenantMembers = await context.Users
                     .Where(u => u.TenantMemberships.Any(tm => tm.TenantId == tenantId.Value && tm.IsActive))
@@ -167,33 +167,33 @@ public static class DbInitializer
 
                 foreach (var member in existingTenantMembers)
                 {
-                    var profileMatch = originalCustomerProfiles.FirstOrDefault(p => p.Name == member.Name);
-                    if (profileMatch.Name != null && !customerSpecificPreferences.ContainsKey(member.Id))
+                    var profileMatch = customerPersonas.FirstOrDefault(p => p.Name == member.Name);
+                    if (profileMatch.Name != null && !customerPersonaMap.ContainsKey(member.Id))
                     {
-                        customerSpecificPreferences[member.Id] = profileMatch.PreferredCategoryNames
-                           .Select(name => categoryNameToIdMap.TryGetValue(name, out var catId) ? catId : Guid.Empty)
-                           .Where(id => id != Guid.Empty).ToList();
+                        customerPersonaMap[member.Id] = (
+                            profileMatch.Persona,
+                            profileMatch.PreferredCategories.Select(name => categoryNameToIdMap.TryGetValue(name, out var catId) ? catId : Guid.Empty)
+                                                        .Where(id => id != Guid.Empty).ToList()
+                        );
                     }
                 }
 
-
-                for (int i = 0; i < originalCustomerProfiles.Count; i++)
+                for (int i = 0; i < customerPersonas.Count; i++)
                 {
-                    var currentProfile = originalCustomerProfiles[i];
-                    string customerName = currentProfile.Name;
+                    var currentProfile = customerPersonas[i];
                     string customerEmail = $"cliente{i + 1}@gmail.com";
-                    string customerPhone = $"{random.Next(60000000, 79999999)}";
 
                     if (createdCustomerUsers.Any(u => u.Email == customerEmail)) continue;
 
                     var customerDto = new CustomerRegisterDto
                     {
-                        Name = customerName,
+                        Name = currentProfile.Name,
                         Email = customerEmail,
                         Password = customerPasswordForSeeding,
                         ConfirmPassword = customerPasswordForSeeding,
-                        PhoneNumber = customerPhone
+                        PhoneNumber = $"{random.Next(60000000, 79999999)}"
                     };
+
                     var regResult = await accountService.RegisterCustomerForTenantAsync(customerDto, tenantId.Value);
                     if (regResult.IdentityResult.Succeeded && regResult.UserId.HasValue)
                     {
@@ -201,17 +201,86 @@ public static class DbInitializer
                         if (appUser != null && !createdCustomerUsers.Contains(appUser))
                         {
                             createdCustomerUsers.Add(appUser);
-                            customerSpecificPreferences[appUser.Id] = currentProfile.PreferredCategoryNames
-                                .Select(name => categoryNameToIdMap.TryGetValue(name, out var catId) ? catId : Guid.Empty)
-                                .Where(id => id != Guid.Empty).ToList();
+                            customerPersonaMap[appUser.Id] = (
+                                currentProfile.Persona,
+                                currentProfile.PreferredCategories.Select(name => categoryNameToIdMap.TryGetValue(name, out var catId) ? catId : Guid.Empty)
+                                                            .Where(id => id != Guid.Empty).ToList()
+                            );
                         }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Failed to register/link customer {customerEmail} for tenant {tenantId.Value}: {string.Join(", ", regResult.IdentityResult.Errors.Select(e => e.Description))}");
                     }
                 }
 
+                var ordersExistForTenant = await context.Orders.AnyAsync(o => o.TenantId == tenantId.Value);
+                if (createdCustomerUsers.Any() && createdProductDtos.Any() && !ordersExistForTenant)
+                {
+                    var productsForOrders = createdProductDtos.Where(p => p.IsAvailable).ToList();
+                    if (productsForOrders.Any())
+                    {
+                        foreach (var customerUser in createdCustomerUsers.Where(cu => cu.Email != "enrique@gmail.com" && cu.TenantMemberships.Any(tm => tm.TenantId == tenantId.Value)))
+                        {
+                            int numberOfOrdersForCustomer = random.Next(10, 21);
+                            if (!customerPersonaMap.TryGetValue(customerUser.Id, out var personaInfo)) continue;
+
+                            for (int i = 0; i < numberOfOrdersForCustomer; i++)
+                            {
+                                var orderItems = new List<OrderItem>();
+                                decimal orderTotalAmount = 0m;
+                                var chosenProductsForThisOrder = new HashSet<Guid>();
+
+                                switch (personaInfo.Persona)
+                                {
+                                    case "PartyHost":
+                                        var partyCake = productsForOrders.Where(p => p.CategoryId == categoryNameToIdMap["Tortas Premium"] || p.TagNames.Contains("Cumpleaños")).OrderBy(x => random.Next()).FirstOrDefault();
+                                        if (partyCake != null && chosenProductsForThisOrder.Add(partyCake.Id))
+                                        {
+                                            orderItems.Add(new OrderItem { Id = Guid.NewGuid(), ProductId = partyCake.Id, ProductName = partyCake.Name, Quantity = 1, UnitPrice = partyCake.Price });
+                                        }
+                                        var savorySnacks = productsForOrders.Where(p => p.CategoryId == categoryNameToIdMap["Panadería Salada"]).OrderBy(x => random.Next()).Take(random.Next(1, 3));
+                                        foreach (var snack in savorySnacks) { if (chosenProductsForThisOrder.Add(snack.Id)) orderItems.Add(new OrderItem { Id = Guid.NewGuid(), ProductId = snack.Id, ProductName = snack.Name, Quantity = random.Next(6, 12), UnitPrice = snack.Price }); }
+                                        var drinks = productsForOrders.Where(p => p.CategoryId == categoryNameToIdMap["Bebidas"]).OrderBy(x => random.Next()).Take(random.Next(1, 2));
+                                        foreach (var drink in drinks) { if (chosenProductsForThisOrder.Add(drink.Id)) orderItems.Add(new OrderItem { Id = Guid.NewGuid(), ProductId = drink.Id, ProductName = drink.Name, Quantity = random.Next(2, 5), UnitPrice = drink.Price }); }
+                                        break;
+
+                                    case "Traditionalist":
+                                        if (random.Next(0, 2) == 0)
+                                        {
+                                            var classicCake = productsForOrders.Where(p => p.CategoryId == categoryNameToIdMap["Tortas Clasicas"]).OrderBy(x => random.Next()).FirstOrDefault();
+                                            if (classicCake != null && chosenProductsForThisOrder.Add(classicCake.Id)) orderItems.Add(new OrderItem { Id = Guid.NewGuid(), ProductId = classicCake.Id, ProductName = classicCake.Name, Quantity = 1, UnitPrice = classicCake.Price });
+                                        }
+                                        else
+                                        {
+                                            var traditionalItems = productsForOrders.Where(p => p.CategoryId == categoryNameToIdMap["Masitas Secas"] || (p.CategoryId == categoryNameToIdMap["Panadería Salada"] && (p.Name.Contains("Empanada") || p.Name.Contains("Cuñapé"))))
+                                                .OrderBy(x => random.Next()).Take(random.Next(2, 4));
+                                            foreach (var item in traditionalItems) { if (chosenProductsForThisOrder.Add(item.Id)) orderItems.Add(new OrderItem { Id = Guid.NewGuid(), ProductId = item.Id, ProductName = item.Name, Quantity = random.Next(2, 6), UnitPrice = item.Price }); }
+                                        }
+                                        break;
+
+                                    case "DessertLover":
+                                        var desserts = productsForOrders.Where(p => p.CategoryId == categoryNameToIdMap["Postres Frios"] || p.CategoryId == categoryNameToIdMap["Especialidades"] || p.CategoryId == categoryNameToIdMap["Chocolatería"])
+                                            .OrderBy(x => random.Next()).Take(random.Next(2, 4));
+                                        foreach (var dessert in desserts) { if (chosenProductsForThisOrder.Add(dessert.Id)) orderItems.Add(new OrderItem { Id = Guid.NewGuid(), ProductId = dessert.Id, ProductName = dessert.Name, Quantity = random.Next(1, 3), UnitPrice = dessert.Price }); }
+                                        break;
+
+                                    case "HealthConscious":
+                                        var healthyItems = productsForOrders.Where(p => p.CategoryId == categoryNameToIdMap["Vegano"] || p.TagNames.Contains("Saludable") || p.TagNames.Contains("Frutal"))
+                                            .OrderBy(x => random.Next()).Take(random.Next(1, 4));
+                                        foreach (var item in healthyItems) { if (chosenProductsForThisOrder.Add(item.Id)) orderItems.Add(new OrderItem { Id = Guid.NewGuid(), ProductId = item.Id, ProductName = item.Name, Quantity = random.Next(1, 3), UnitPrice = item.Price }); }
+                                        break;
+                                }
+
+                                if (!orderItems.Any()) continue;
+                                orderTotalAmount = orderItems.Sum(oi => oi.UnitPrice * oi.Quantity);
+
+                                var orderDate = DateTimeOffset.UtcNow.AddDays(-random.Next(0, 181));
+                                var deliveryDate = orderDate.AddDays(random.Next(1, 7));
+                                var orderStatus = GetRandomPastOrderStatus(random);
+                                var updatedAt = orderStatus == OrderStatus.Pending ? orderDate : orderDate.AddMinutes(random.Next(5, 60 * 24));
+                                await context.Orders.AddAsync(new Order { Id = Guid.NewGuid(), TenantId = tenantId.Value, ApplicationUserId = customerUser.Id, OrderDate = orderDate, DeliveryDate = deliveryDate, TotalAmount = orderTotalAmount, Status = orderStatus, CreatedAt = orderDate, UpdatedAt = updatedAt, OrderItems = orderItems });
+                            }
+                        }
+                        await context.SaveChangesAsync();
+                    }
+                }
 
                 var enriqueProfile = ("Enrique Vera", new List<string> { "Tortas Clasicas", "Masitas Secas", "Tortas Premium" });
                 string enriqueEmail = "enrique@gmail.com";
@@ -235,9 +304,9 @@ public static class DbInitializer
                         if (enriqueUserObject != null && !createdCustomerUsers.Contains(enriqueUserObject))
                         {
                             createdCustomerUsers.Add(enriqueUserObject);
-                            customerSpecificPreferences[enriqueUserObject.Id] = enriqueProfile.Item2
+                            customerPersonaMap[enriqueUserObject.Id] = ("PowerUser", enriqueProfile.Item2
                                .Select(name => categoryNameToIdMap.TryGetValue(name, out var catId) ? catId : Guid.Empty)
-                               .Where(id => id != Guid.Empty).ToList();
+                               .Where(id => id != Guid.Empty).ToList());
                         }
                     }
                     else
@@ -245,74 +314,11 @@ public static class DbInitializer
                         Console.WriteLine($"Failed to register/link Enrique Vera for tenant {tenantId.Value}: {string.Join(", ", regResultEnrique.IdentityResult.Errors.Select(e => e.Description))}");
                     }
                 }
-                else if (!customerSpecificPreferences.ContainsKey(enriqueUserObject.Id))
+                else if (!customerPersonaMap.ContainsKey(enriqueUserObject.Id))
                 {
-                    customerSpecificPreferences[enriqueUserObject.Id] = enriqueProfile.Item2
-                       .Select(name => categoryNameToIdMap.TryGetValue(name, out var catId) ? catId : Guid.Empty)
-                       .Where(id => id != Guid.Empty).ToList();
-                }
-
-
-
-                var ordersExistForTenant = await context.Orders.AnyAsync(o => o.TenantId == tenantId.Value);
-                if (createdCustomerUsers.Any() && createdProductDtos.Any() && !ordersExistForTenant)
-                {
-                    var productsForOrders = createdProductDtos.Where(p => p.IsAvailable).ToList();
-                    if (productsForOrders.Any())
-                    {
-                        foreach (var customerUser in createdCustomerUsers.Where(cu => cu.TenantMemberships.Any(tm => tm.TenantId == tenantId.Value)))
-                        {
-                            int numberOfOrdersForCustomer = (customerUser.Email == "enrique@gmail.com") ? 1 : random.Next(1, 3);
-
-                            for (int i = 0; i < numberOfOrdersForCustomer; i++)
-                            {
-                                var orderItems = new List<OrderItem>();
-                                decimal orderTotalAmount = 0m;
-                                int numberOfProductsInOrder = random.Next(1, Math.Min(3, productsForOrders.Count + 1));
-                                var chosenProductsForThisOrder = new HashSet<Guid>();
-
-                                List<Guid> preferredCatsForUser = new List<Guid>();
-                                if (customerSpecificPreferences.TryGetValue(customerUser.Id, out var prefs)) preferredCatsForUser = prefs;
-
-                                if (preferredCatsForUser.Any())
-                                {
-                                    var preferredProds = productsForOrders.Where(p => preferredCatsForUser.Contains(p.CategoryId)).ToList();
-                                    int takeFromPreferred = preferredProds.Any() ? random.Next(0, Math.Min(numberOfProductsInOrder, preferredProds.Count) + 1) : 0;
-
-                                    foreach (var productToAdd in preferredProds.OrderBy(x => random.Next()).Take(takeFromPreferred))
-                                    {
-                                        if (chosenProductsForThisOrder.Add(productToAdd.Id))
-                                        {
-                                            int quantity = random.Next(1, 2);
-                                            orderItems.Add(new OrderItem { Id = Guid.NewGuid(), ProductId = productToAdd.Id, ProductName = productToAdd.Name, Quantity = quantity, UnitPrice = productToAdd.Price });
-                                            orderTotalAmount += productToAdd.Price * quantity;
-                                        }
-                                    }
-                                }
-                                int remainingProductsToChoose = numberOfProductsInOrder - orderItems.Count;
-                                if (remainingProductsToChoose > 0)
-                                {
-                                    var otherProds = productsForOrders.Where(p => !chosenProductsForThisOrder.Contains(p.Id) && !preferredCatsForUser.Contains(p.CategoryId)).ToList();
-                                    foreach (var productToAdd in otherProds.OrderBy(x => random.Next()).Take(remainingProductsToChoose))
-                                    {
-                                        if (chosenProductsForThisOrder.Add(productToAdd.Id))
-                                        {
-                                            int quantity = random.Next(1, 2);
-                                            orderItems.Add(new OrderItem { Id = Guid.NewGuid(), ProductId = productToAdd.Id, ProductName = productToAdd.Name, Quantity = quantity, UnitPrice = productToAdd.Price });
-                                            orderTotalAmount += productToAdd.Price * quantity;
-                                        }
-                                    }
-                                }
-                                if (!orderItems.Any()) continue;
-                                var orderDate = DateTimeOffset.UtcNow.AddDays(-random.Next(7, 200));
-                                var deliveryDate = orderDate.AddDays(random.Next(1, 7));
-                                var orderStatus = GetRandomPastOrderStatus(random);
-                                var updatedAt = orderStatus == OrderStatus.Pending ? orderDate : orderDate.AddMinutes(random.Next(5, 60 * 24));
-                                await context.Orders.AddAsync(new Order { Id = Guid.NewGuid(), TenantId = tenantId.Value, ApplicationUserId = customerUser.Id, OrderDate = orderDate, DeliveryDate = deliveryDate, TotalAmount = orderTotalAmount, Status = orderStatus, CreatedAt = orderDate, UpdatedAt = updatedAt, OrderItems = orderItems });
-                            }
-                        }
-                        await context.SaveChangesAsync();
-                    }
+                    customerPersonaMap[enriqueUserObject.Id] = ("PowerUser", enriqueProfile.Item2
+                      .Select(name => categoryNameToIdMap.TryGetValue(name, out var catId) ? catId : Guid.Empty)
+                      .Where(id => id != Guid.Empty).ToList());
                 }
 
 

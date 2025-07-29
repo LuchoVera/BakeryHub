@@ -15,6 +15,7 @@ using BakeryHub.Application.Interfaces.BackgroundServices;
 using BakeryHub.Api.BackgroundServices;
 using BakeryHub.Application.Services.BackgroundServices;
 using BakeryHub.Application.Models;
+using BakeryHub.Infrastructure.Storage;
 
 DotNetEnv.Env.Load();
 var builder = WebApplication.CreateBuilder(args);
@@ -112,13 +113,23 @@ builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<ITenantManagementService, TenantManagementService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
-builder.Services.AddSingleton<MLContext>();
-if (!builder.Environment.IsDevelopment())
+
+if (builder.Environment.IsDevelopment())
 {
-    builder.Services.AddScoped<IRecommendationService, RecommendationService>();
-    builder.Services.AddScoped<IModelRetrainingService, ModelRetrainingService>();
-    builder.Services.AddHostedService<ScheduledRecommendationRetrainingService>();
+    builder.Services.AddScoped<IModelStorage, LocalFileModelStorage>();
 }
+else
+{
+    builder.Services.AddScoped<IModelStorage, AzureBlobModelStorage>();
+}
+
+builder.Services.AddSingleton<MLContext>();
+
+builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+builder.Services.AddScoped<IModelRetrainingService, ModelRetrainingService>();
+builder.Services.AddHostedService<ScheduledRecommendationRetrainingService>();
+
+
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
