@@ -18,7 +18,7 @@ public class RecommendationService : IRecommendationService
     private readonly IProductRepository _productRepository;
     private readonly ApplicationDbContext _dbContext;
     private readonly IConfiguration _configuration;
-    private readonly BlobContainerClient _blobContainerClient;
+    private readonly IModelStorage _modelStorage;
 
     private readonly ConcurrentDictionary<Guid, ITransformer> _tenantModels = new();
     private readonly ConcurrentDictionary<Guid, PredictionEngine<ProductRating, ProductRatingPrediction>> _tenantPredictionEngines = new();
@@ -29,27 +29,14 @@ public class RecommendationService : IRecommendationService
         MLContext mlContext,
         IProductRepository productRepository,
         ApplicationDbContext dbContext,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IModelStorage modelStorage)
     {
         _mlContext = mlContext;
         _productRepository = productRepository;
         _dbContext = dbContext;
         _configuration = configuration;
-
-        var storageConnectionString = _configuration.GetConnectionString("BlobStorage");
-        if (string.IsNullOrWhiteSpace(storageConnectionString))
-        {
-            throw new InvalidOperationException("ConnectionStrings:BlobStorage is not configured.");
-        }
-
-        var blobServiceClient = new BlobServiceClient(storageConnectionString);
-        _blobContainerClient = blobServiceClient.GetBlobContainerClient("tenant-models");
-        _blobContainerClient.CreateIfNotExists();
-    }
-
-    private string GetModelBlobNameForTenant(Guid tenantId)
-    {
-        return $"model_tenant_{tenantId}.zip";
+        _modelStorage = modelStorage;
     }
 
     private SemaphoreSlim GetTenantLock(Guid tenantId)
@@ -58,7 +45,7 @@ public class RecommendationService : IRecommendationService
     }
 
     private async Task<(PredictionEngine<ProductRating, ProductRatingPrediction>? Engine, DataMappings? Mappings)>
-        EnsureModelAndMappingsLoadedForTenantAsync(Guid tenantId)
+            EnsureModelAndMappingsLoadedForTenantAsync(Guid tenantId)
     {
         var tenantLock = GetTenantLock(tenantId);
         await tenantLock.WaitAsync();
@@ -69,9 +56,6 @@ public class RecommendationService : IRecommendationService
             ITransformer? tenantTrainedModel = null;
             PredictionEngine<ProductRating, ProductRatingPrediction>? predictionEngine = null;
 
-            var modelBlobName = GetModelBlobNameForTenant(tenantId);
-            var blobClient = _blobContainerClient.GetBlobClient(modelBlobName);
-
             var dataLoader = new DataLoader(_mlContext, _dbContext);
             tenantDataMappings = await dataLoader.LoadMappingsAndHistoryForTenantAsync(tenantId);
 
@@ -80,20 +64,18 @@ public class RecommendationService : IRecommendationService
                 return (null, tenantDataMappings);
             }
 
-            if (await blobClient.ExistsAsync())
+            if (await _modelStorage.ModelExistsAsync(tenantId))
             {
                 try
                 {
                     DataViewSchema modelSchema;
-                    using var stream = new MemoryStream();
-                    await blobClient.DownloadToAsync(stream);
-                    stream.Position = 0;
-                    tenantTrainedModel = _mlContext.Model.Load(stream, out modelSchema);
+                    using var stream = await _modelStorage.LoadModelAsync(tenantId);
+                    if (stream != null)
+                    {
+                        tenantTrainedModel = _mlContext.Model.Load(stream, out modelSchema);
+                    }
                 }
-                catch
-                {
-                    tenantTrainedModel = null;
-                }
+                catch { tenantTrainedModel = null; }
             }
 
             if (tenantTrainedModel == null)
@@ -114,12 +96,10 @@ public class RecommendationService : IRecommendationService
                     using var stream = new MemoryStream();
                     _mlContext.Model.Save(tenantTrainedModel, trainData.Schema, stream);
                     stream.Position = 0;
-                    await blobClient.UploadAsync(stream, overwrite: true);
+
+                    await _modelStorage.SaveModelAsync(tenantId, stream);
                 }
-                catch
-                {
-                    tenantTrainedModel = null;
-                }
+                catch { tenantTrainedModel = null; }
             }
 
             if (tenantTrainedModel != null)
@@ -145,34 +125,25 @@ public class RecommendationService : IRecommendationService
 
         try
         {
-            var modelBlobName = GetModelBlobNameForTenant(tenantId);
-            var blobClient = _blobContainerClient.GetBlobClient(modelBlobName);
-
             DataMappings? tenantDataMappings = await new DataLoader(_mlContext, _dbContext).LoadMappingsAndHistoryForTenantAsync(tenantId);
 
             if (tenantDataMappings == null || !tenantDataMappings.ProductGuidToIntMap.Any() || !tenantDataMappings.UserGuidToFloatMap.Any())
             {
-                if (await blobClient.ExistsAsync()) await blobClient.DeleteIfExistsAsync();
+                if (await _modelStorage.ModelExistsAsync(tenantId)) await _modelStorage.DeleteModelAsync(tenantId);
                 return false;
             }
 
             IDataView? trainData = new DataLoader(_mlContext, _dbContext).LoadDataForTenant(tenantDataMappings);
             if (trainData == null || trainData.GetColumn<float>(nameof(ProductRating.UserId)).Count() == 0)
             {
-                if (await blobClient.ExistsAsync()) await blobClient.DeleteIfExistsAsync();
+                if (await _modelStorage.ModelExistsAsync(tenantId)) await _modelStorage.DeleteModelAsync(tenantId);
                 return false;
             }
 
             var modelTrainer = new ModelTrainer(_mlContext);
             ITransformer? newTrainedModel;
-            try
-            {
-                newTrainedModel = modelTrainer.TrainModel(trainData);
-            }
-            catch
-            {
-                return false;
-            }
+            try { newTrainedModel = modelTrainer.TrainModel(trainData); }
+            catch { return false; }
 
             if (newTrainedModel != null)
             {
@@ -181,7 +152,8 @@ public class RecommendationService : IRecommendationService
                     using var stream = new MemoryStream();
                     _mlContext.Model.Save(newTrainedModel, trainData.Schema, stream);
                     stream.Position = 0;
-                    await blobClient.UploadAsync(stream, overwrite: true);
+
+                    await _modelStorage.SaveModelAsync(tenantId, stream);
 
                     var newPredictionEngine = _mlContext.Model.CreatePredictionEngine<ProductRating, ProductRatingPrediction>(newTrainedModel);
                     _tenantModels[tenantId] = newTrainedModel;
@@ -189,10 +161,7 @@ public class RecommendationService : IRecommendationService
                     _tenantDataMappings[tenantId] = tenantDataMappings;
                     return true;
                 }
-                catch
-                {
-                    return false;
-                }
+                catch { return false; }
             }
             return false;
         }
