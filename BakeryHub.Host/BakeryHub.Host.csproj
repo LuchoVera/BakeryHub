@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.8">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../BakeryHub.Infrastructure/BakeryHub.Infrastructure.csproj" />
+    <ProjectReference Include="../BakeryHub.Application/BakeryHub.Application.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Accounts.Api\BakeryHub.Modules.Accounts.Api.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Accounts.Infrastructure\BakeryHub.Modules.Accounts.Infrastructure.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Catalog.Api\BakeryHub.Modules.Catalog.Api.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Catalog.Infrastructure\BakeryHub.Modules.Catalog.Infrastructure.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Dashboard.Api\BakeryHub.Modules.Dashboard.Api.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Dashboard.Infrastructure\BakeryHub.Modules.Dashboard.Infrastructure.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Orders.Api\BakeryHub.Modules.Orders.Api.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Orders.Infrastructure\BakeryHub.Modules.Orders.Infrastructure.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Recommendations.Api\BakeryHub.Modules.Recommendations.Api.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Recommendations.Infrastructure\BakeryHub.Modules.Recommendations.Infrastructure.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Tenants.Api\BakeryHub.Modules.Tenants.Api.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Tenants.Infrastructure\BakeryHub.Modules.Tenants.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
