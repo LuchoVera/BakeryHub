@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BakeryHub.Domain\BakeryHub.Domain.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Accounts.Domain\BakeryHub.Modules.Accounts.Domain.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Catalog.Domain\BakeryHub.Modules.Catalog.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
