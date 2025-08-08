@@ -2,15 +2,19 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.4" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.4" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.4" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
 
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.24.1" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.25.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.0" />
 
     <ProjectReference Include="..\BakeryHub.Domain\BakeryHub.Domain.csproj" />
+
+    <ProjectReference Include="..\BakeryHub.Modules.Accounts.Domain\BakeryHub.Modules.Accounts.Domain.csproj" />
+
+    <ProjectReference Include="..\BakeryHub.Modules.Catalog.Domain\BakeryHub.Modules.Catalog.Domain.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
