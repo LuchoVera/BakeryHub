@@ -1,4 +1,3 @@
-
 using Microsoft.AspNetCore.Identity;
 
 namespace BakeryHub.Modules.Accounts.Domain.Models;

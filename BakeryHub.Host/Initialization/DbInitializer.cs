@@ -72,7 +72,6 @@ public static class DbInitializer
                 }
                 else if (adminUser != null && existingTenant == null && adminUser.TenantId.HasValue)
                 {
-                    // --- CAMBIO: Usar context.Set<Tenant>() ---
                     existingTenant = await context.Set<Tenant>().FindAsync(adminUser.TenantId.Value);
                     if (existingTenant == null) { Console.WriteLine($"Admin {adminUser.Email} has TenantId {adminUser.TenantId.Value} but tenant not found."); return; }
                     if (existingTenant.Subdomain != defaultSubdomain)
@@ -97,7 +96,6 @@ public static class DbInitializer
                 };
                 var createdCategoryDtos = new List<CategoryDto>();
 
-                // --- CAMBIO: Usar context.Set<Category>() ---
                 if (!await context.Set<Category>().Where(c => c.TenantId == tenantId.Value).AnyAsync())
                 {
                     foreach (var catDtoIn in defaultCategoriesInput)
@@ -106,7 +104,6 @@ public static class DbInitializer
                         if (createdCatDto != null) createdCategoryDtos.Add(createdCatDto);
                         else
                         {
-                            // --- CAMBIO: Usar context.Set<Category>() ---
                             var existingCat = await context.Set<Category>().IgnoreQueryFilters()
                                 .FirstOrDefaultAsync(c => c.TenantId == tenantId.Value && EF.Functions.ILike(c.Name, catDtoIn.Name));
                             if (existingCat != null) createdCategoryDtos.Add(new CategoryDto { Id = existingCat.Id, Name = existingCat.Name });
@@ -115,7 +112,6 @@ public static class DbInitializer
                 }
                 else
                 {
-                    // --- CAMBIO: Usar context.Set<Category>() ---
                     createdCategoryDtos = await context.Set<Category>()
                         .Where(c => c.TenantId == tenantId.Value && !c.IsDeleted)
                         .Select(c => new CategoryDto { Id = c.Id, Name = c.Name })
@@ -127,7 +123,6 @@ public static class DbInitializer
 
                 var createdProductDtos = new List<ProductDto>();
 
-                // --- CAMBIO: Usar context.Set<Product>() ---
                 if (!await context.Set<Product>().Where(p => p.TenantId == tenantId.Value).AnyAsync())
                 {
                     var defaultProductsInput = GenerateDefaultProducts(categoryNameToIdMap);

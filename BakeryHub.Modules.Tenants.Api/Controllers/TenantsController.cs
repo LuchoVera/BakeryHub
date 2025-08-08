@@ -7,8 +7,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
-
 namespace BakeryHub.Modules.Tenants.Api.Controllers;
+
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin")]

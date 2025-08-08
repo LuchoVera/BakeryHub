@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace BakeryHub.Modules.Accounts.Application.Dtos.Customer;
 
-
 public class CustomerRegisterDto
 {
     [Required]

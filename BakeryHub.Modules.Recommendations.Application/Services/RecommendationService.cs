@@ -268,7 +268,6 @@ public class RecommendationService : IRecommendationService
         {
             foreach (var item in order.OrderItems)
             {
-                // La consulta del repositorio ya no trae Product.Category, así que lo manejamos
                 var product = await _productRepository.GetByIdAsync(item.ProductId);
                 if (product?.CategoryId != null)
                 {

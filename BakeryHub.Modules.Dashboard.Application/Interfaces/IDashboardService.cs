@@ -1,5 +1,4 @@
-﻿
-using BakeryHub.Modules.Dashboard.Application.Dtos.Dashboard;
+﻿using BakeryHub.Modules.Dashboard.Application.Dtos.Dashboard;
 
 namespace BakeryHub.Modules.Dashboard.Application.Interfaces;
 
