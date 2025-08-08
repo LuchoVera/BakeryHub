@@ -1,23 +1,25 @@
-using BakeryHub.Infrastructure.Persistence;
-using Microsoft.OpenApi.Models;
-using Microsoft.EntityFrameworkCore;
-using BakeryHub.Application.Interfaces;
+using BakeryHub.Application.Models;
 using BakeryHub.Application.Services;
 using BakeryHub.Domain.Interfaces;
-using BakeryHub.Infrastructure.Persistence.Repositories;
-using BakeryHub.Domain.Entities;
-using Microsoft.AspNetCore.Identity;
+using BakeryHub.Infrastructure.Persistence;
+using BakeryHub.Modules.Accounts.Domain.Models;
+using BakeryHub.Modules.Accounts.Infrastructure;
+using BakeryHub.Modules.Catalog.Infrastructure;
+using BakeryHub.Modules.Dashboard.Infrastructure;
+using BakeryHub.Modules.Orders.Application.Services;
+using BakeryHub.Modules.Orders.Infrastructure;
+using BakeryHub.Modules.Recommendations.Infrastructure;
+using BakeryHub.Modules.Tenants.Infrastructure;
+using BakeryHub.Shared.Kernel.Interfaces;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.ML;
-using BakeryHub.Api.Initialization;
+using Microsoft.OpenApi.Models;
 using System.Text.Json.Serialization;
-using BakeryHub.Application.Interfaces.BackgroundServices;
-using BakeryHub.Api.BackgroundServices;
-using BakeryHub.Application.Services.BackgroundServices;
-using BakeryHub.Application.Models;
-using BakeryHub.Infrastructure.Storage;
 
 DotNetEnv.Env.Load();
+
 var builder = WebApplication.CreateBuilder(args);
 
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
@@ -42,9 +44,9 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
-        {
-            options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-        });
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -66,13 +68,10 @@ builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
     options.Password.RequireUppercase = true;
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequiredLength = 4;
-
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.AllowedForNewUsers = true;
-
     options.User.RequireUniqueEmail = false;
-
     options.SignIn.RequireConfirmedEmail = false;
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -100,39 +99,18 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
 });
 
-builder.Services.Configure<MailSettings>(builder.Configuration.GetSection("MailSettings"));
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ITenantRepository, TenantRepository>();
-builder.Services.AddScoped<IProductRepository, ProductRepository>();
-builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
-builder.Services.AddScoped<IOrderRepository, OrderRepository>();
-builder.Services.AddScoped<ITagRepository, TagRepository>();
+builder.Services.AddAccountsModule();
+builder.Services.AddCatalogModule();
+builder.Services.AddTenantsModule();
+builder.Services.AddOrdersModule();
+builder.Services.AddDashboardModule();
+builder.Services.AddRecommendationsModule(builder.Environment);
 
-builder.Services.AddScoped<IAccountService, AccountService>();
-builder.Services.AddScoped<IProductService, ProductService>();
-builder.Services.AddScoped<ICategoryService, CategoryService>();
-builder.Services.AddScoped<ITenantManagementService, TenantManagementService>();
-builder.Services.AddScoped<IOrderService, OrderService>();
-
-if (builder.Environment.IsDevelopment())
-{
-    builder.Services.AddScoped<IModelStorage, LocalFileModelStorage>();
-}
-else
-{
-    builder.Services.AddScoped<IModelStorage, AzureBlobModelStorage>();
-}
-
+builder.Services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<ApplicationDbContext>());
 builder.Services.AddSingleton<MLContext>();
-
-builder.Services.AddScoped<IRecommendationService, RecommendationService>();
-builder.Services.AddScoped<IModelRetrainingService, ModelRetrainingService>();
-builder.Services.AddHostedService<ScheduledRecommendationRetrainingService>();
-
-
-builder.Services.AddScoped<ITagService, TagService>();
+builder.Services.Configure<MailSettings>(builder.Configuration.GetSection("MailSettings"));
 builder.Services.AddScoped<IEmailService, EmailService>();
-
+builder.Services.AddScoped<IOrderChecker, OrderService>();
 
 var app = builder.Build();
 
@@ -158,7 +136,6 @@ if (app.Environment.IsDevelopment())
 app.UseCors(MyAllowSpecificOrigins);
 app.UseAuthentication();
 app.UseAuthorization();
-
 
 app.MapControllers();
 

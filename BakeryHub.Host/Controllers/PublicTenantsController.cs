@@ -1,13 +1,19 @@
 using System.Security.Claims;
-using BakeryHub.Application.Dtos;
-using BakeryHub.Application.Dtos.Enums;
-using BakeryHub.Application.Dtos.Theme;
 using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Interfaces;
+using BakeryHub.Modules.Accounts.Application.Dtos.Customer;
+using BakeryHub.Modules.Accounts.Application.Dtos.Enums;
+using BakeryHub.Modules.Accounts.Application.Interfaces;
+using BakeryHub.Modules.Catalog.Application.Dtos;
+using BakeryHub.Modules.Catalog.Application.Interfaces;
+using BakeryHub.Modules.Orders.Application.Dtos.Order;
+using BakeryHub.Modules.Recommendations.Application.Interfaces;
+using BakeryHub.Modules.Tenants.Application.Dtos.Tenant;
+using BakeryHub.Modules.Tenants.Application.Dtos.Theme;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace BakeryHub.Api.Controllers;
+namespace BakeryHub.Host.Controllers;
 
 [ApiController]
 [Route("api/public/tenants")]
@@ -344,13 +350,18 @@ public class PublicTenantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IEnumerable<CategoryDto>>> GetPreferredCategories(string subdomain)
     {
+        if (_recommendationService == null)
+        {
+            return Ok(Enumerable.Empty<CategoryDto>());
+        }
+
         var tenant = await _tenantRepository.GetBySubdomainAsync(subdomain.ToLowerInvariant());
         if (tenant == null) return NotFound($"Tenant '{subdomain}' not found.");
 
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(userIdString, out Guid userId)) return Unauthorized("User ID could not be determined.");
 
-        var preferredCategories = await _categoryService.GetPreferredCategoriesForCustomerAsync(tenant.Id, userId);
+        var preferredCategories = await _recommendationService.GetPreferredCategoriesForCustomerAsync(tenant.Id, userId);
         return Ok(preferredCategories);
     }
 

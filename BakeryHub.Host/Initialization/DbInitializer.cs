@@ -1,12 +1,18 @@
-using BakeryHub.Application.Dtos;
-using BakeryHub.Application.Interfaces;
 using BakeryHub.Domain.Entities;
-using BakeryHub.Domain.Enums;
 using BakeryHub.Infrastructure.Persistence;
+using BakeryHub.Modules.Accounts.Application.Dtos.Admin;
+using BakeryHub.Modules.Accounts.Application.Dtos.Customer;
+using BakeryHub.Modules.Accounts.Application.Interfaces;
+using BakeryHub.Modules.Accounts.Domain.Models;
+using BakeryHub.Modules.Catalog.Application.Dtos;
+using BakeryHub.Modules.Catalog.Application.Interfaces;
+using BakeryHub.Modules.Catalog.Domain.Models;
+using BakeryHub.Modules.Orders.Domain.Enums;
+using BakeryHub.Modules.Orders.Domain.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace BakeryHub.Api.Initialization;
+namespace BakeryHub.Host.Initialization;
 
 public static class DbInitializer
 {
@@ -34,7 +40,7 @@ public static class DbInitializer
 
             Guid? tenantId = null;
             ApplicationUser? adminUser = await userManager.FindByEmailAsync(defaultAdminEmail);
-            Tenant? existingTenant = await context.Tenants.FirstOrDefaultAsync(t => t.Subdomain == defaultSubdomain);
+            Tenant? existingTenant = await context.Set<Tenant>().FirstOrDefaultAsync(t => t.Subdomain == defaultSubdomain);
 
             if (adminUser == null && existingTenant == null)
             {
@@ -66,7 +72,8 @@ public static class DbInitializer
                 }
                 else if (adminUser != null && existingTenant == null && adminUser.TenantId.HasValue)
                 {
-                    existingTenant = await context.Tenants.FindAsync(adminUser.TenantId.Value);
+                    // --- CAMBIO: Usar context.Set<Tenant>() ---
+                    existingTenant = await context.Set<Tenant>().FindAsync(adminUser.TenantId.Value);
                     if (existingTenant == null) { Console.WriteLine($"Admin {adminUser.Email} has TenantId {adminUser.TenantId.Value} but tenant not found."); return; }
                     if (existingTenant.Subdomain != defaultSubdomain)
                     {
@@ -90,7 +97,8 @@ public static class DbInitializer
                 };
                 var createdCategoryDtos = new List<CategoryDto>();
 
-                if (!await context.Categories.Where(c => c.TenantId == tenantId.Value).AnyAsync())
+                // --- CAMBIO: Usar context.Set<Category>() ---
+                if (!await context.Set<Category>().Where(c => c.TenantId == tenantId.Value).AnyAsync())
                 {
                     foreach (var catDtoIn in defaultCategoriesInput)
                     {
@@ -98,7 +106,8 @@ public static class DbInitializer
                         if (createdCatDto != null) createdCategoryDtos.Add(createdCatDto);
                         else
                         {
-                            var existingCat = await context.Categories.IgnoreQueryFilters()
+                            // --- CAMBIO: Usar context.Set<Category>() ---
+                            var existingCat = await context.Set<Category>().IgnoreQueryFilters()
                                 .FirstOrDefaultAsync(c => c.TenantId == tenantId.Value && EF.Functions.ILike(c.Name, catDtoIn.Name));
                             if (existingCat != null) createdCategoryDtos.Add(new CategoryDto { Id = existingCat.Id, Name = existingCat.Name });
                         }
@@ -106,7 +115,8 @@ public static class DbInitializer
                 }
                 else
                 {
-                    createdCategoryDtos = await context.Categories
+                    // --- CAMBIO: Usar context.Set<Category>() ---
+                    createdCategoryDtos = await context.Set<Category>()
                         .Where(c => c.TenantId == tenantId.Value && !c.IsDeleted)
                         .Select(c => new CategoryDto { Id = c.Id, Name = c.Name })
                         .ToListAsync();
@@ -117,7 +127,8 @@ public static class DbInitializer
 
                 var createdProductDtos = new List<ProductDto>();
 
-                if (!await context.Products.Where(p => p.TenantId == tenantId.Value).AnyAsync())
+                // --- CAMBIO: Usar context.Set<Product>() ---
+                if (!await context.Set<Product>().Where(p => p.TenantId == tenantId.Value).AnyAsync())
                 {
                     var defaultProductsInput = GenerateDefaultProducts(categoryNameToIdMap);
                     foreach (var prodDtoIn in defaultProductsInput)
@@ -210,7 +221,7 @@ public static class DbInitializer
                     }
                 }
 
-                var ordersExistForTenant = await context.Orders.AnyAsync(o => o.TenantId == tenantId.Value);
+                var ordersExistForTenant = await context.Set<Order>().AnyAsync(o => o.TenantId == tenantId.Value);
                 if (createdCustomerUsers.Any() && createdProductDtos.Any() && !ordersExistForTenant)
                 {
                     var productsForOrders = createdProductDtos.Where(p => p.IsAvailable).ToList();
@@ -275,7 +286,7 @@ public static class DbInitializer
                                 var deliveryDate = orderDate.AddDays(random.Next(1, 7));
                                 var orderStatus = GetRandomPastOrderStatus(random);
                                 var updatedAt = orderStatus == OrderStatus.Pending ? orderDate : orderDate.AddMinutes(random.Next(5, 60 * 24));
-                                await context.Orders.AddAsync(new Order { Id = Guid.NewGuid(), TenantId = tenantId.Value, ApplicationUserId = customerUser.Id, OrderDate = orderDate, DeliveryDate = deliveryDate, TotalAmount = orderTotalAmount, Status = orderStatus, CreatedAt = orderDate, UpdatedAt = updatedAt, OrderItems = orderItems });
+                                await context.Set<Order>().AddAsync(new Order { Id = Guid.NewGuid(), TenantId = tenantId.Value, ApplicationUserId = customerUser.Id, OrderDate = orderDate, DeliveryDate = deliveryDate, TotalAmount = orderTotalAmount, Status = orderStatus, CreatedAt = orderDate, UpdatedAt = updatedAt, OrderItems = orderItems });
                             }
                         }
                         await context.SaveChangesAsync();
@@ -325,8 +336,8 @@ public static class DbInitializer
                 ApplicationUser? enriqueUserForOrders = await userManager.FindByEmailAsync("enrique@gmail.com");
                 if (enriqueUserForOrders != null && createdProductDtos.Any())
                 {
-                    bool isEnriqueMember = await context.CustomerTenantMemberships
-                                               .AnyAsync(m => m.ApplicationUserId == enriqueUserForOrders.Id && m.TenantId == tenantId.Value && m.IsActive);
+                    bool isEnriqueMember = await context.Set<CustomerTenantMembership>()
+                                              .AnyAsync(m => m.ApplicationUserId == enriqueUserForOrders.Id && m.TenantId == tenantId.Value && m.IsActive);
                     if (isEnriqueMember)
                     {
                         Guid tortasClasicasCatId = categoryNameToIdMap.TryGetValue("Tortas Clasicas", out var tcId) ? tcId : Guid.Empty;
@@ -364,7 +375,7 @@ public static class DbInitializer
                             var deliveryDate = orderDate.AddDays(random.Next(0, 3));
                             var orderStatus = GetRandomPastOrderStatus(random);
                             var updatedAt = orderStatus == OrderStatus.Pending ? orderDate : orderDate.AddMinutes(random.Next(5, 60 * 24 * 2));
-                            await context.Orders.AddAsync(new Order { Id = Guid.NewGuid(), TenantId = tenantId.Value, ApplicationUserId = enriqueUserForOrders.Id, OrderDate = orderDate, DeliveryDate = deliveryDate, TotalAmount = orderTotalAmount, Status = orderStatus, CreatedAt = orderDate, UpdatedAt = updatedAt, OrderItems = orderItems });
+                            await context.Set<Order>().AddAsync(new Order { Id = Guid.NewGuid(), TenantId = tenantId.Value, ApplicationUserId = enriqueUserForOrders.Id, OrderDate = orderDate, DeliveryDate = deliveryDate, TotalAmount = orderTotalAmount, Status = orderStatus, CreatedAt = orderDate, UpdatedAt = updatedAt, OrderItems = orderItems });
                             enriqueOrderCount++;
                         }
                         if (enriqueOrderCount > 0) { await context.SaveChangesAsync(); Console.WriteLine($"Seeded {enriqueOrderCount} specific orders for Enrique Vera for tenant {tenantId.Value}."); }
