@@ -1,5 +1,5 @@
-using BakeryHub.Application.Interfaces;
 using BakeryHub.Application.Models;
+using BakeryHub.Shared.Kernel.Interfaces;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Net.Mail;

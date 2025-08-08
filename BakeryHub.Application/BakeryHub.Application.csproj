@@ -1,17 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.24.1" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.25.0" />
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
-    <PackageReference Include="Microsoft.Extensions.Identity.Stores" Version="9.0.4" />
+    <PackageReference Include="Microsoft.Extensions.Identity.Stores" Version="9.0.8" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.ML" Version="4.0.2" />
 
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\BakeryHub.Domain\BakeryHub.Domain.csproj" />
-    <ProjectReference Include="..\BakeryHub.Infrastructure\BakeryHub.Infrastructure.csproj" />
+    <ProjectReference Include="..\BakeryHub.Shared.Kernel\BakeryHub.Shared.Kernel.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
