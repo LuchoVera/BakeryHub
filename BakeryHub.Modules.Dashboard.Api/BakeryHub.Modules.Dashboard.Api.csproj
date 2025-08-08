@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<FrameworkReference Include="Microsoft.AspNetCore.App" Version="2.2.8" />
+  </ItemGroup>
+	    
+  <ItemGroup>
+    <ProjectReference Include="..\BakeryHub.Modules.Accounts.Domain\BakeryHub.Modules.Accounts.Domain.csproj" />
+    <ProjectReference Include="..\BakeryHub.Modules.Dashboard.Application\BakeryHub.Modules.Dashboard.Application.csproj" />
+    <ProjectReference Include="..\BakeryHub.Shared.Kernel\BakeryHub.Shared.Kernel.csproj" />
+  </ItemGroup>
+
+</Project>
